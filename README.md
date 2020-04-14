@@ -38,7 +38,7 @@ migrator.config({
   // false disables logging
   log: true,
   // null or a function
-  logger: (level, ..arg) => console.log(level, ..arg),
+  logger: (level, ...args) => console.log(level, ...args),
   // enable/disable info log "already at latest."
   logIfLatest: true,
   // migrations collection name. Defaults to 'migrations'
@@ -69,7 +69,7 @@ var migrator = new Migration({
   // false disables logging
   log: true,
   // null or a function
-  logger: (level, ..arg) => console.log(level, ..arg),
+  logger: (level, ...args) => console.log(level, ...args),
   // enable/disable info log "already at latest."
   logIfLatest: true,
   // migrations collection name
