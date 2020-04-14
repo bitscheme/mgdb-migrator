@@ -158,10 +158,7 @@ export class Migration {
     Object.freeze(migration);
 
     this.migrations.push(migration);
-
-    _.map(this.migrations).sort((a: IMigration, b: IMigration) =>
-      semver.compare(a.version, b.version),
-    );
+    this.migrations.sort((a: IMigration, b: IMigration) => semver.compare(a.version, b.version));
   }
 
   /**
@@ -203,14 +200,14 @@ export class Migration {
   }
 
   /**
-   * Returns the number of migrations
+   * Returns the migrations
    *
-   * @returns {number}
+   * @returns {IMigration[]}
    * @memberof Migration
    */
-  public getNumberOfMigrations(): number {
+  public getMigrations(): IMigration[] {
     // Exclude default/base migration v0 since its not a configured migration
-    return this.migrations.length - 1;
+    return this.migrations.slice(1);
   }
 
   /**

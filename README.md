@@ -195,10 +195,10 @@ To see what version the database is at, call:
 migrator.getVersion()
 ```
 
-To see what number of migrations configured, call:
+To see the configured migrations (excluding 0.0.0), call:
 
 ```javascript
-migrator.getNumberOfMigrations()
+migrator.getMigrations()
 ```
 
 **IMPORTANT**:

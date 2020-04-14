@@ -53,6 +53,42 @@ describe('Migration', () => {
     await migrator.reset();
   });
 
+  describe('#add', () => {
+    test('sorts added migrations', async () => {
+      migrator.add({
+        version: v5,
+        name: 'v5',
+        up: (db) => {
+          //
+        },
+        down: (db) => {
+          //
+        },
+      });
+      migrator.add({
+        version: v3,
+        name: 'v3',
+        up: (db) => {
+          //
+        },
+        down: (db) => {
+          //
+        },
+      });
+      migrator.add({
+        version: v4,
+        name: 'v4',
+        up: (db) => {
+          //
+        },
+        down: (db) => {
+          //
+        },
+      });
+      migrator.getMigrations().map((m, index) => expect(Number(m.name.charAt(1))).toBe(index + 1));
+    });
+  });
+
   describe('#migrateTo', () => {
     test('from v0 to v1, should migrate to v1', async () => {
       let currentVersion = await migrator.getVersion();
