@@ -43,7 +43,7 @@ migrator.config({
   logIfLatest: true,
   // migrations collection name. Defaults to 'migrations'
   collectionName: 'migrations',
-  // mongodb connection properties object or mongo Db instance
+  // mongodb connection properties object
   db: {
     // mongodb connection url
     connectionUrl: "your connection string",
@@ -74,7 +74,7 @@ var migrator = new Migration({
   logIfLatest: true,
   // migrations collection name
   collectionName: 'migrations',
-  // mongodb connection properties object or mongo Db instance
+  // mongodb connection properties object
   db: {
     // mongodb connection url
     connectionUrl: "your connection string",
@@ -96,11 +96,11 @@ To write a simple migration, somewhere in the server section of your project def
 ```javascript
 migrator.add({
   version: '0.0.1',
-  up: function(db) {
+  up: function(db, client) {
     // use `db`(mongo driver Db instance) for migration setup to version 0.0.1
     // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
   },
-  down: function(db) {
+  down: function(db, client) {
     //
   }
 })
@@ -109,7 +109,7 @@ migrator.add({
 To run this migration to the latest version:
 
 ```javascript
-migrator.migrateTo()
+migrator.migrateTo('latest')
 ```
 
 ### Advanced
@@ -120,11 +120,11 @@ A more complete set of migrations might look like:
 migrator.add({
   version: '1.1.1',
   name: 'Name for this migration',
-  up: function(db) {
+  up: (db, client) => {
     // use `db`(mongo driver Db instance) for migration setup to version 1.1.1
     // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
   },
-  down: function(db) {
+  down: (db, client) => {
     // use `db`(mongo driver Db instance) for migration setup to previous version
     // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
   }
@@ -133,11 +133,11 @@ migrator.add({
 migrator.add({
   version: '1.1.2',
   name: 'Name for this migration',
-  up: function(db) {
+  up: (db, client) => {
     // use `db`(mongo driver Db instance) for migration setup to version 1.1.2
     // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
   },
-  down: function(db) {
+  down: (db, client) => {
     // use `db`(mongo driver Db instance) for migration setup to previous version
     // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
   }
@@ -150,12 +150,12 @@ Control execution flow with async/await (promises):
 migrator.add({
   version: '1.1.2',
   name: 'Name for this migration',
-  up: async function(db) {
+  up: async (db, client) => {
     // use `db`(mongo driver Db instance) for migration setup to version 1.1.2
     // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
      await db.collections('someCollection')....
   },
-  down: async function(db) {
+  down: async (db, client) => {
     // use `db`(mongo driver Db instance) for migration setup to previous version
     // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
     await db.collections('someCollection')....
@@ -195,10 +195,16 @@ To see what version the database is at, call:
 migrator.getVersion()
 ```
 
-To see the configured migrations (excluding 0.0.0), call:
+To see the configured migrations (excludes 0.0.0), call:
 
 ```javascript
 migrator.getMigrations()
+```
+
+To close the mongodb connection, call:
+
+```javascript
+migrator.close()
 ```
 
 **IMPORTANT**:

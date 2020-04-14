@@ -3,10 +3,10 @@ import { Migration } from '../src/';
 const dbURL = process.env.DBURL;
 const v0 = '0.0.0';
 const v1 = '0.0.1';
-const v2 = '0.0.2';
-const v3 = '0.0.3';
-const v4 = '0.0.4';
-const v5 = '0.0.5';
+const v2 = '0.1.2';
+const v3 = '0.10.3';
+const v4 = '1.0.4';
+const v5 = '100.0.5';
 
 describe('Migration', () => {
   let migrator: Migration;
@@ -29,10 +29,10 @@ describe('Migration', () => {
     migrator.add({
       version: v1,
       name: 'v1',
-      up: (db) => {
+      up: () => {
         //
       },
-      down: (db) => {
+      down: () => {
         //
       },
     });
@@ -40,10 +40,10 @@ describe('Migration', () => {
     migrator.add({
       version: v2,
       name: 'v2',
-      up: (db) => {
+      up: () => {
         //
       },
-      down: (db) => {
+      down: () => {
         //
       },
     });
@@ -53,35 +53,39 @@ describe('Migration', () => {
     await migrator.reset();
   });
 
+  afterAll(async () => {
+    await migrator.close();
+  });
+
   describe('#add', () => {
     test('sorts added migrations', async () => {
       migrator.add({
         version: v5,
         name: 'v5',
-        up: (db) => {
+        up: () => {
           //
         },
-        down: (db) => {
+        down: () => {
           //
         },
       });
       migrator.add({
         version: v3,
         name: 'v3',
-        up: (db) => {
+        up: () => {
           //
         },
-        down: (db) => {
+        down: () => {
           //
         },
       });
       migrator.add({
         version: v4,
         name: 'v4',
-        up: (db) => {
+        up: () => {
           //
         },
-        down: (db) => {
+        down: () => {
           //
         },
       });
@@ -148,22 +152,22 @@ describe('Migration', () => {
         migrator.add({
           version: v3,
           name: 'v3',
-          up: async (db) => {
+          up: async () => {
             //
           },
-          down: async (db) => {
+          down: async () => {
             //
           },
         });
 
         migrator.add({
           version: v4,
-          name: 'Version 0.0.4',
-          up: async (db) => {
-            return 'done';
+          name: 'v4',
+          up: async () => {
+            //
           },
-          down: async (db) => {
-            return 'done';
+          down: async () => {
+            //
           },
         });
       });
@@ -190,10 +194,10 @@ describe('Migration', () => {
         migrator.add({
           version: v3,
           name: 'v3',
-          up: async (db) => {
+          up: async () => {
             //
           },
-          down: async (db) => {
+          down: async () => {
             //
           },
         });
@@ -201,10 +205,10 @@ describe('Migration', () => {
         migrator.add({
           version: v4,
           name: 'v4',
-          up: async (db) => {
+          up: async () => {
             //
           },
-          down: async (db) => {
+          down: async () => {
             throw new Error('Something went wrong');
           },
         });
@@ -212,10 +216,10 @@ describe('Migration', () => {
         migrator.add({
           version: v5,
           name: 'v5',
-          up: async (db) => {
+          up: async () => {
             throw new Error('Something went wrong');
           },
-          down: async (db) => {
+          down: async () => {
             //
           },
         });

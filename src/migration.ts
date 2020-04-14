@@ -46,13 +46,13 @@ export interface IMigrationOptions {
   logger?: (level: SyslogLevels, ...args: any[]) => void;
   logIfLatest?: boolean;
   collectionName?: string;
-  db: IDbProperties | Db;
+  db: IDbProperties;
 }
 export interface IMigration {
   version: string;
   name: string;
-  up: (db: Db) => Promise<any> | any;
-  down: (db: Db) => Promise<any> | any;
+  up: (db: Db, client: MongoClient) => Promise<any> | any;
+  down: (db: Db, client: MongoClient) => Promise<any> | any;
 }
 
 export class Migration {
@@ -69,6 +69,7 @@ export class Migration {
   private migrations: IMigration[];
   private collection: Collection;
   private db: Db;
+  private client: MongoClient;
   private options: IMigrationOptions;
 
   /**
@@ -106,29 +107,22 @@ export class Migration {
     this.options = Object.assign({}, this.options, opts);
 
     if (!this.options.logger && this.options.log) {
-      // tslint:disable-next-line: no-console
+      // tslint:disable-next-line:no-console
       this.options.logger = (level: string, ...args) => console.log(level, ...args);
     }
+
     if (this.options.log === false) {
       // tslint:disable-next-line:no-empty
       this.options.logger = (level: string, ...args) => {};
     }
-    if (!(this.db instanceof Db) && !this.options.db) {
-      throw new ReferenceError('Option.db cannot be null');
+
+    const dbOptions = { ...this.options.db.options };
+    if (dbOptions.useNewUrlParser !== false) {
+      dbOptions.useNewUrlParser = true;
     }
-    let db: IDbProperties | Db;
-    if (this.options.db instanceof Db) {
-      db = this.options.db;
-    } else {
-      const options = { ...this.options.db.options };
-      if (options.useNewUrlParser !== false) {
-        options.useNewUrlParser = true;
-      }
-      const client = await MongoClient.connect(this.options.db.connectionUrl, options);
-      db = client.db(this.options.db.name || undefined);
-    }
-    this.collection = (db as Db).collection(this.options.collectionName);
-    this.db = db as Db;
+    this.client = await MongoClient.connect(this.options.db.connectionUrl, dbOptions);
+    this.db = this.client.db(this.options.db.name || undefined);
+    this.collection = this.db.collection(this.options.collectionName);
   }
 
   /**
@@ -194,8 +188,20 @@ export class Migration {
     try {
       await this.execute(target, rerun);
     } catch (e) {
-      this.options.logger('info', `Encountered an error while migrating. Migration failed.`);
+      this.options.logger('error', `Encountered an error while migrating. Migration failed.`);
       throw e;
+    }
+  }
+
+  /**
+   * Closes the connection
+   *
+   * @returns {Promise<void>}
+   * @memberof Migration
+   */
+  public async close(force: boolean = false): Promise<void> {
+    if (this.client) {
+      await this.client.close(force);
     }
   }
 
@@ -276,7 +282,7 @@ export class Migration {
         'Running ' + direction + '() on version ' + migration.version + maybeName(),
       );
 
-      await migration[direction](self.db, migration);
+      await migration[direction](self.db, self.client);
     };
 
     // Returns true if lock was acquired.
