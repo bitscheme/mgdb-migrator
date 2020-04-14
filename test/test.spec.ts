@@ -9,7 +9,6 @@ const v4 = '0.0.4';
 const v5 = '0.0.5';
 
 describe('Migration', () => {
-
   let migrator: Migration;
 
   beforeAll(async () => {
@@ -48,7 +47,6 @@ describe('Migration', () => {
         //
       },
     });
-
   });
 
   afterEach(async () => {
@@ -56,7 +54,6 @@ describe('Migration', () => {
   });
 
   describe('#migrateTo', () => {
-
     test('from v0 to v1, should migrate to v1', async () => {
       let currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v0);
@@ -111,7 +108,6 @@ describe('Migration', () => {
     });
 
     describe('With async up() & down()', () => {
-
       beforeEach(() => {
         migrator.add({
           version: v3,
@@ -134,7 +130,6 @@ describe('Migration', () => {
             return 'done';
           },
         });
-
       });
 
       test('from v0 to v3, should migrate to v3', async () => {
@@ -152,7 +147,6 @@ describe('Migration', () => {
         currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v4);
       });
-
     });
 
     describe('On Error', () => {
@@ -189,7 +183,6 @@ describe('Migration', () => {
             //
           },
         });
-
       });
 
       test('from v0 to v5, should stop migration at v4 due to error from v4 to v5', async () => {
@@ -218,9 +211,6 @@ describe('Migration', () => {
         currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v4);
       });
-
     });
-
   });
-
 });

@@ -56,7 +56,6 @@ export interface IMigration {
 }
 
 export class Migration {
-
   private initialMigration: IMigration = {
     version: '0.0.0',
     name: 'v0',
@@ -80,18 +79,20 @@ export class Migration {
   constructor(opts?: IMigrationOptions) {
     // Since we'll be at version 0.0.0 by default, we should have a migration set for it.
     this.migrations = [this.initialMigration];
-    this.options = opts ? opts : {
-      // False disables logging
-      log: true,
-      // Null or a function
-      logger: null,
-      // Enable/disable info log "already at latest."
-      logIfLatest: true,
-      // Migrations collection name
-      collectionName: 'migrations',
-      // Mongodb url or mongo Db instance
-      db: null,
-    };
+    this.options = opts
+      ? opts
+      : {
+          // False disables logging
+          log: true,
+          // Null or a function
+          logger: null,
+          // Enable/disable info log "already at latest."
+          logIfLatest: true,
+          // Migrations collection name
+          collectionName: 'migrations',
+          // Mongodb url or mongo Db instance
+          db: null,
+        };
   }
 
   /**
@@ -102,7 +103,6 @@ export class Migration {
    * @memberof Migration
    */
   public async config(opts?: IMigrationOptions): Promise<void> {
-
     this.options = Object.assign({}, this.options, opts);
 
     if (!this.options.logger && this.options.log) {
@@ -111,10 +111,10 @@ export class Migration {
     }
     if (this.options.log === false) {
       // tslint:disable-next-line:no-empty
-      this.options.logger = (level: string, ...args) => { };
+      this.options.logger = (level: string, ...args) => {};
     }
     if (!(this.db instanceof Db) && !this.options.db) {
-      throw new ReferenceError('Option.db canno\'t be null');
+      throw new ReferenceError('Option.db cannot be null');
     }
     let db: IDbProperties | Db;
     if (this.options.db instanceof Db) {
@@ -124,10 +124,7 @@ export class Migration {
       if (options.useNewUrlParser !== false) {
         options.useNewUrlParser = true;
       }
-      const client = await MongoClient.connect(
-        this.options.db.connectionUrl,
-        options,
-      );
+      const client = await MongoClient.connect(this.options.db.connectionUrl, options);
       db = client.db(this.options.db.name || undefined);
     }
     this.collection = (db as Db).collection(this.options.collectionName);
@@ -141,7 +138,6 @@ export class Migration {
    * @memberof Migration
    */
   public add(migration: IMigration): void {
-
     if (typeof migration.up !== 'function') {
       throw new Error('Migration must supply an up function.');
     }
@@ -164,7 +160,8 @@ export class Migration {
     this.migrations.push(migration);
 
     _.map(this.migrations).sort((a: IMigration, b: IMigration) =>
-      semver.compare(a.version, b.version));
+      semver.compare(a.version, b.version),
+    );
   }
 
   /**
@@ -177,8 +174,10 @@ export class Migration {
    */
   public async migrateTo(version: string, rerun: boolean = false): Promise<void> {
     if (!this.db) {
-      throw new Error('Migration instance has not be configured/initialized.' +
-        ' Call <instance>.config(..) to initialize this instance');
+      throw new Error(
+        'Migration instance has not be configured/initialized.' +
+          ' Call <instance>.config(..) to initialize this instance',
+      );
     }
 
     let target = version;
@@ -198,8 +197,7 @@ export class Migration {
     try {
       await this.execute(target, rerun);
     } catch (e) {
-      this.options.
-        logger('info', `Encountered an error while migrating. Migration failed.`);
+      this.options.logger('info', `Encountered an error while migrating. Migration failed.`);
       throw e;
     }
   }
@@ -273,11 +271,12 @@ export class Migration {
         return migration.name ? ' (' + migration.name + ')' : '';
       }
 
-      this.options.logger('info',
-        'Running ' + direction + '() on version ' + migration.version + maybeName());
+      this.options.logger(
+        'info',
+        'Running ' + direction + '() on version ' + migration.version + maybeName(),
+      );
 
       await migration[direction](self.db, migration);
-
     };
 
     // Returns true if lock was acquired.
@@ -287,30 +286,35 @@ export class Migration {
        * object and thus be able to update it.  All other simultaneous callers will not match the
        * object and thus will have null return values in the result of the operation.
        */
-      const updateResult = await self.collection.findOneAndUpdate({
-        _id: 'control',
-        locked: false,
-      }, {
-        $set: {
-          locked: true,
-          lockedAt: new Date(),
+      const updateResult = await self.collection.findOneAndUpdate(
+        {
+          _id: 'control',
+          locked: false,
         },
-      });
+        {
+          $set: {
+            locked: true,
+            lockedAt: new Date(),
+          },
+        },
+      );
 
       return null != updateResult.value && 1 === updateResult.ok;
     };
 
     // Side effect: saves version.
-    const unlock = () => self.setControl({
-      locked: false,
-      version: currentVersion,
-    });
+    const unlock = () =>
+      self.setControl({
+        locked: false,
+        version: currentVersion,
+      });
 
     // Side effect: saves version.
-    const updateVersion = async () => await self.setControl({
-      locked: true,
-      version: currentVersion,
-    });
+    const updateVersion = async () =>
+      await self.setControl({
+        locked: true,
+        version: currentVersion,
+      });
 
     if ((await lock()) === false) {
       this.options.logger('info', 'Not migrating, control is locked.');
@@ -337,8 +341,13 @@ export class Migration {
     const endIdx = this.findIndexByVersion(version);
 
     // Log.info('startIdx:' + startIdx + ' endIdx:' + endIdx);
-    this.options.logger('info', 'Migrating from version ' + this.migrations[startIdx].version
-      + ' -> ' + this.migrations[endIdx].version);
+    this.options.logger(
+      'info',
+      'Migrating from version ' +
+        this.migrations[startIdx].version +
+        ' -> ' +
+        this.migrations[endIdx].version,
+    );
 
     if (currentVersion < version) {
       for (let i = startIdx; i < endIdx; i++) {
@@ -350,7 +359,9 @@ export class Migration {
           const prevVersion = self.migrations[i].version;
           const destVersion = self.migrations[i + 1].version;
           this.options.logger(
-            'error', `Encountered an error while migrating from ${prevVersion} to ${destVersion}`);
+            'error',
+            `Encountered an error while migrating from ${prevVersion} to ${destVersion}`,
+          );
           throw e;
         }
       }
@@ -364,7 +375,9 @@ export class Migration {
           const prevVersion = self.migrations[i].version;
           const destVersion = self.migrations[i - 1].version;
           this.options.logger(
-            'error', `Encountered an error while migrating from ${prevVersion} to ${destVersion}`);
+            'error',
+            `Encountered an error while migrating from ${prevVersion} to ${destVersion}`,
+          );
           throw e;
         }
       }
@@ -381,12 +394,15 @@ export class Migration {
    * @returns {Promise<{ version: string, locked: boolean }>}
    * @memberof Migration
    */
-  private async getControl(): Promise<{ version: string, locked: boolean }> {
+  private async getControl(): Promise<{ version: string; locked: boolean }> {
     const con = await this.collection.findOne({ _id: 'control' });
-    return con || (await this.setControl({
-      version: '0.0.0',
-      locked: false,
-    }));
+    return (
+      con ||
+      (await this.setControl({
+        version: '0.0.0',
+        locked: false,
+      }))
+    );
   }
 
   /**
@@ -397,22 +413,28 @@ export class Migration {
    * @returns {(Promise<{ version: string, locked: boolean } | null>)}
    * @memberof Migration
    */
-  private async setControl(control: { version: string, locked: boolean }):
-    Promise<{ version: string, locked: boolean } | null> {
+  private async setControl(control: {
+    version: string
+    locked: boolean,
+  }): Promise<{ version: string; locked: boolean } | null> {
     // Be quite strict
     check('String', control.version);
     check('Boolean', control.locked);
 
-    const updateResult = await this.collection.updateOne({
-      _id: 'control',
-    }, {
-      $set: {
-        version: control.version,
-        locked: control.locked,
+    const updateResult = await this.collection.updateOne(
+      {
+        _id: 'control',
       },
-    }, {
-      upsert: true,
-    });
+      {
+        $set: {
+          version: control.version,
+          locked: control.locked,
+        },
+      },
+      {
+        upsert: true,
+      },
+    );
 
     if (updateResult && updateResult.result.ok) {
       return control;
@@ -438,5 +460,4 @@ export class Migration {
 
     throw new Error('Migration version ' + version + ' not found');
   }
-
 }

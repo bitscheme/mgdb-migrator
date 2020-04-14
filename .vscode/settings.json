@@ -16,5 +16,10 @@
     //"**/*.d.ts": true,
     "**/*.map": true
   },
-  "typescript.tsdk": "node_modules/typescript/lib"
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "prettier.tslintIntegration": true,
+  "prettier.arrowParens": "always",
+  "prettier.singleQuote": true,
+  "editor.formatOnSave": true,
+  "prettier.printWidth": 100
 }
