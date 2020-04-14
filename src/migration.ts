@@ -221,16 +221,18 @@ export class Migration {
    */
   public async getVersion(): Promise<string> {
     const control = await this.getControl();
+
     return control.version;
   }
 
   /**
    * Unlock control
    *
+   * @returns {Promise<void>}
    * @memberof Migration
    */
-  public unlock(): void {
-    this.collection.updateOne({ _id: 'control' }, { $set: { locked: false } });
+  public async unlock(): Promise<void> {
+    await this.collection.updateOne({ _id: 'control' }, { $set: { locked: false } });
   }
 
   /**
@@ -241,6 +243,7 @@ export class Migration {
    */
   public async reset(): Promise<void> {
     this.migrations = [this.initialMigration];
+
     await this.collection.deleteMany({});
   }
 
@@ -396,6 +399,7 @@ export class Migration {
    */
   private async getControl(): Promise<{ version: string; locked: boolean }> {
     const con = await this.collection.findOne({ _id: 'control' });
+
     return (
       con ||
       (await this.setControl({
