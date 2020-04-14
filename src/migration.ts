@@ -2,30 +2,35 @@
   Adds migration capabilities. Migrations are defined like:
 
   Migrations.add({
-    up: function() {}, //*required* code to run to migrate upwards
-    version: 1, //*required* number to identify migration order
-    down: function() {}, //*optional* code to run to migrate downwards
+    version: '0.0.1', //*required* semver to identify migration version
+    up: function(db) {}, //*required* code to run to migrate upwards
+    down: function(db) {}, //*required* code to run to migrate downwards
     name: 'Something' //*optional* display name for the migration
   });
 
-  The ordering of migrations is determined by the version you set.
+  The ordering of migrations is determined by the semver.
 
-  To run the migrations, set the MIGRATE environment variable to either
-  'latest' or the version number you want to migrate to.
+  To run migrations using environment variables, set:
+
+  MIGRATE_VERSION to either 'latest' or the version number you want to migrate to.
+  MIGRATE_RERUN to rerun an migration.
 
   e.g:
-  MIGRATE="latest"  # ensure we'll be at the latest version and run the app
-  MIGRATE="2,rerun"  # re-run the migration at that version
+  MIGRATE_VERSION="latest"  # ensure we'll be at the latest version and run the app
+  MIGRATE_VERSION="0.0.2"   # migrate to the specific version
+  MIGRATE_RERUN="true"      # re-run the migration at the version
 
   Note: Migrations will lock ensuring only 1 app can be migrating at once. If
   a migration crashes, the control record in the migrations collection will
   remain locked and at the version it was at previously, however the db could
-  be in an inconsistant state.
+  be in an inconsistent state.
 */
 
 import * as _ from 'lodash';
 import { Collection, Db, MongoClient, MongoClientOptions } from 'mongodb';
+import * as semver from 'semver';
 import { typeCheck } from 'type-check';
+
 const check = typeCheck;
 
 export type SyslogLevels = 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'crit' | 'alert';
@@ -44,7 +49,7 @@ export interface IMigrationOptions {
   db: IDbProperties | Db;
 }
 export interface IMigration {
-  version: number;
+  version: string;
   name: string;
   up: (db: Db) => Promise<any> | any;
   down: (db: Db) => Promise<any> | any;
@@ -53,9 +58,10 @@ export interface IMigration {
 export class Migration {
 
   private defaultMigration = {
-    version: 0,
-    // tslint:disable-next-line:no-empty
-    up: () => { },
+    version: '0.0.0',
+    up: () => {
+      //
+    },
   };
   private list: any[];
   private collection: Collection;
@@ -68,7 +74,7 @@ export class Migration {
    * @memberof Migration
    */
   constructor(opts?: IMigrationOptions) {
-    // Since we'll be at version 0 by default, we should have a migration set for it.
+    // Since we'll be at version 0.0.0 by default, we should have a migration set for it.
     this.list = [this.defaultMigration];
     this.options = opts ? opts : {
       // False disables logging
@@ -79,7 +85,7 @@ export class Migration {
       logIfLatest: true,
       // Migrations collection name
       collectionName: 'migrations',
-      // Mongdb url or mongo Db instance
+      // Mongodb url or mongo Db instance
       db: null,
     };
   }
@@ -140,58 +146,58 @@ export class Migration {
       throw new Error('Migration must supply a down function.');
     }
 
-    if (typeof migration.version !== 'number') {
-      throw new Error('Migration must supply a version number.');
+    if (typeof migration.version !== 'string' || !semver.valid(migration.version)) {
+      throw new Error('Migration must supply a SemVer version string.');
     }
 
-    if (migration.version <= 0) {
-      throw new Error('Migration version must be greater than 0');
+    if (semver.lte(migration.version, '0.0.0')) {
+      throw new Error('Migration version must be greater than 0.0.0');
     }
 
     // Freeze the migration object to make it hereafter immutable
     Object.freeze(migration);
 
     this.list.push(migration);
-    this.list = _.sortBy(this.list, (m: any) => m.version);
+
+    _.map(this.list).sort((a: IMigration, b: IMigration) =>
+      semver.compare(a.version, b.version));
   }
 
   /**
-   * Run the migrations using command in the form of:
-   * @example 'latest' - migrate to latest, 2, '2,rerun'
-   * @example 2 - migrate to version 2
-   * @example '2,rerun' - if at version 2, re-run up migration
+   * Run the migrations
+   * @param {string} version A semver version or 'latest'
+   * @param {boolean} [rerun] Rerun the migration (default is false)
+   * @example migrateTo('latest') - migrate to latest version
+   * @example migrateTo('0.0.2') - migrate to version '0.0.2'
+   * @example migrateTo('0.0.2', true) - if at version 2, re-run up migration
    */
-  public async migrateTo(command: string | number): Promise<void> {
+  public async migrateTo(version: string, rerun: boolean = false): Promise<void> {
     if (!this.db) {
       throw new Error('Migration instance has not be configured/initialized.' +
         ' Call <instance>.config(..) to initialize this instance');
     }
 
-    if (_.isUndefined(command) || command === '' || this.list.length === 0) {
-      throw new Error('Cannot migrate using invalid command: ' + command);
+    let target = version;
+
+    if (target === 'latest') {
+      target = _.last<any>(this.list).version;
     }
 
-    let version: string | number;
-    let subcommand: string;
-    if (typeof command === 'number') {
-      version = command;
-    } else {
-      version = command.split(',')[0];
-      subcommand = command.split(',')[1];
+    if (!semver.valid(target)) {
+      throw new Error('Invalid semver specified');
+    }
+
+    if (this.list.length === 0) {
+      throw new Error('No pending migrations');
     }
 
     try {
-      if (version === 'latest') {
-        await this.execute(_.last<any>(this.list).version);
-      } else {
-        await this.execute(parseInt(version as string, null), (subcommand === 'rerun'));
-      }
+      await this.execute(target, rerun);
     } catch (e) {
       this.options.
         logger('info', `Encountered an error while migrating. Migration failed.`);
       throw e;
     }
-
   }
 
   /**
@@ -208,10 +214,10 @@ export class Migration {
   /**
    * Returns the current version
    *
-   * @returns {Promise<number>}
+   * @returns {Promise<string>}
    * @memberof Migration
    */
-  public async getVersion(): Promise<number> {
+  public async getVersion(): Promise<string> {
     const control = await this.getControl();
     return control.version;
   }
@@ -240,18 +246,18 @@ export class Migration {
    * Migrate to the specific version passed in
    *
    * @private
-   * @param {*} version
-   * @param {*} [rerun]
+   * @param {string} version
+   * @param {boolean} rerun
    * @returns {Promise<void>}
    * @memberof Migration
    */
-  private async execute(version: any, rerun?: any): Promise<void> {
+  private async execute(version: string, rerun: boolean = false): Promise<void> {
     const self = this;
     const control = await this.getControl(); // Side effect: upserts control document.
     let currentVersion = control.version;
 
     // Run the actual migration
-    const migrate = async (direction, idx) => {
+    const migrate = async (direction, idx: number) => {
       const migration = self.list[idx];
 
       if (typeof migration[direction] !== 'function') {
@@ -309,7 +315,7 @@ export class Migration {
 
     if (rerun) {
       this.options.logger('info', 'Rerunning version ' + version);
-      migrate('up', version);
+      migrate('up', this.findIndexByVersion(version));
       this.options.logger('info', 'Finished migrating.');
       await unlock();
       return;
@@ -365,16 +371,16 @@ export class Migration {
   }
 
   /**
-   * Gets the current control record, optionally creating it if non-existant
+   * Gets the current control record, optionally creating it if non-existent
    *
    * @private
-   * @returns {Promise<{ version: number, locked: boolean }>}
+   * @returns {Promise<{ version: string, locked: boolean }>}
    * @memberof Migration
    */
-  private async getControl(): Promise<{ version: number, locked: boolean }> {
+  private async getControl(): Promise<{ version: string, locked: boolean }> {
     const con = await this.collection.findOne({ _id: 'control' });
     return con || (await this.setControl({
-      version: 0,
+      version: '0.0.0',
       locked: false,
     }));
   }
@@ -383,14 +389,14 @@ export class Migration {
    * Set the control record
    *
    * @private
-   * @param {{ version: number, locked: boolean }} control
-   * @returns {(Promise<{ version: number, locked: boolean } | null>)}
+   * @param {{ version: string, locked: boolean }} control
+   * @returns {(Promise<{ version: string, locked: boolean } | null>)}
    * @memberof Migration
    */
-  private async setControl(control: { version: number, locked: boolean }):
-    Promise<{ version: number, locked: boolean } | null> {
+  private async setControl(control: { version: string, locked: boolean }):
+    Promise<{ version: string, locked: boolean } | null> {
     // Be quite strict
-    check('Number', control.version);
+    check('String', control.version);
     check('Boolean', control.locked);
 
     const updateResult = await this.collection.updateOne({
@@ -415,18 +421,18 @@ export class Migration {
    * Returns the migration index in _list or throws if not found
    *
    * @private
-   * @param {any} version
+   * @param {string} version
    * @returns {number}
    * @memberof Migration
    */
-  private findIndexByVersion(version): number {
+  private findIndexByVersion(version: string): number {
     for (let i = 0; i < this.list.length; i++) {
       if (this.list[i].version === version) {
         return i;
       }
     }
 
-    throw new Error('Can\'t find migration version ' + version);
+    throw new Error('Migration version ' + version + ' not found');
   }
 
 }

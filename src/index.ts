@@ -2,8 +2,11 @@ import { IMigrationOptions, Migration, SyslogLevels } from './migration';
 
 const migrator = new Migration();
 
-if (process.env.MIGRATE) {
-  migrator.migrateTo(process.env.MIGRATE);
+const rerun = process.env.MIGRATE_RERUN === 'true' || false;
+const version = process.env.MIGRATE_VERSION;
+
+if (version) {
+  migrator.migrateTo(version, rerun);
 }
 
 export { migrator, Migration, IMigrationOptions, SyslogLevels };
