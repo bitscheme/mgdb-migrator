@@ -57,13 +57,17 @@ export interface IMigration {
 
 export class Migration {
 
-  private defaultMigration = {
+  private initialMigration: IMigration = {
     version: '0.0.0',
+    name: 'v0',
     up: () => {
       //
     },
+    down: () => {
+      //
+    },
   };
-  private list: any[];
+  private migrations: IMigration[];
   private collection: Collection;
   private db: Db;
   private options: IMigrationOptions;
@@ -75,7 +79,7 @@ export class Migration {
    */
   constructor(opts?: IMigrationOptions) {
     // Since we'll be at version 0.0.0 by default, we should have a migration set for it.
-    this.list = [this.defaultMigration];
+    this.migrations = [this.initialMigration];
     this.options = opts ? opts : {
       // False disables logging
       log: true,
@@ -157,9 +161,9 @@ export class Migration {
     // Freeze the migration object to make it hereafter immutable
     Object.freeze(migration);
 
-    this.list.push(migration);
+    this.migrations.push(migration);
 
-    _.map(this.list).sort((a: IMigration, b: IMigration) =>
+    _.map(this.migrations).sort((a: IMigration, b: IMigration) =>
       semver.compare(a.version, b.version));
   }
 
@@ -180,14 +184,14 @@ export class Migration {
     let target = version;
 
     if (target === 'latest') {
-      target = _.last<any>(this.list).version;
+      target = _.last<any>(this.migrations).version;
     }
 
     if (!semver.valid(target)) {
       throw new Error('Invalid semver specified');
     }
 
-    if (this.list.length === 0) {
+    if (this.migrations.length === 0) {
       throw new Error('No pending migrations');
     }
 
@@ -208,7 +212,7 @@ export class Migration {
    */
   public getNumberOfMigrations(): number {
     // Exclude default/base migration v0 since its not a configured migration
-    return this.list.length - 1;
+    return this.migrations.length - 1;
   }
 
   /**
@@ -238,7 +242,7 @@ export class Migration {
    * @memberof Migration
    */
   public async reset(): Promise<void> {
-    this.list = [this.defaultMigration];
+    this.migrations = [this.initialMigration];
     await this.collection.deleteMany({});
   }
 
@@ -258,7 +262,7 @@ export class Migration {
 
     // Run the actual migration
     const migrate = async (direction, idx: number) => {
-      const migration = self.list[idx];
+      const migration = self.migrations[idx];
 
       if (typeof migration[direction] !== 'function') {
         unlock();
@@ -333,18 +337,18 @@ export class Migration {
     const endIdx = this.findIndexByVersion(version);
 
     // Log.info('startIdx:' + startIdx + ' endIdx:' + endIdx);
-    this.options.logger('info', 'Migrating from version ' + this.list[startIdx].version
-      + ' -> ' + this.list[endIdx].version);
+    this.options.logger('info', 'Migrating from version ' + this.migrations[startIdx].version
+      + ' -> ' + this.migrations[endIdx].version);
 
     if (currentVersion < version) {
       for (let i = startIdx; i < endIdx; i++) {
         try {
           await migrate('up', i + 1);
-          currentVersion = self.list[i + 1].version;
+          currentVersion = self.migrations[i + 1].version;
           await updateVersion();
         } catch (e) {
-          const prevVersion = self.list[i].version;
-          const destVersion = self.list[i + 1].version;
+          const prevVersion = self.migrations[i].version;
+          const destVersion = self.migrations[i + 1].version;
           this.options.logger(
             'error', `Encountered an error while migrating from ${prevVersion} to ${destVersion}`);
           throw e;
@@ -354,11 +358,11 @@ export class Migration {
       for (let i = startIdx; i > endIdx; i--) {
         try {
           await migrate('down', i);
-          currentVersion = self.list[i - 1].version;
+          currentVersion = self.migrations[i - 1].version;
           await updateVersion();
         } catch (e) {
-          const prevVersion = self.list[i].version;
-          const destVersion = self.list[i - 1].version;
+          const prevVersion = self.migrations[i].version;
+          const destVersion = self.migrations[i - 1].version;
           this.options.logger(
             'error', `Encountered an error while migrating from ${prevVersion} to ${destVersion}`);
           throw e;
@@ -426,8 +430,8 @@ export class Migration {
    * @memberof Migration
    */
   private findIndexByVersion(version: string): number {
-    for (let i = 0; i < this.list.length; i++) {
-      if (this.list[i].version === version) {
+    for (let i = 0; i < this.migrations.length; i++) {
+      if (this.migrations[i].version === version) {
         return i;
       }
     }
