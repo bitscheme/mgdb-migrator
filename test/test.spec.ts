@@ -93,11 +93,11 @@ describe('Migration', () => {
     });
   });
 
-  describe('#migrateTo', () => {
+  describe('#migrate', () => {
     test('from v0 to v1, should migrate to v1', async () => {
       let currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v0);
-      await migrator.migrateTo(v1);
+      await migrator.up(v1);
       currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v1);
     });
@@ -105,7 +105,7 @@ describe('Migration', () => {
     test('from v0 to v2, should migrate to v2', async () => {
       let currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v0);
-      await migrator.migrateTo(v2);
+      await migrator.up(v2);
       currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v2);
     });
@@ -113,36 +113,27 @@ describe('Migration', () => {
     test('from v0 to v2, should migrate to latest', async () => {
       let currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v0);
-      await migrator.migrateTo('latest');
+      await migrator.up('latest');
       currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v2);
     });
 
-    test('from v2 to v1, should migrate to v1', async () => {
-      await migrator.migrateTo(v2);
+    test('from v1 to v2 to v1, should migrate back to v1', async () => {
+      await migrator.up(v2);
       let currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v2);
 
-      await migrator.migrateTo(v1);
+      await migrator.down(v1);
       currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v1);
     });
 
-    test('from v2 to v0, should migrate to v0', async () => {
-      await migrator.migrateTo(v2);
+    test('from v1 to v2 to v0, should migrate back to v0', async () => {
+      await migrator.up(v2);
       let currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v2);
 
-      await migrator.migrateTo(v0);
-      currentVersion = await migrator.getVersion();
-      expect(currentVersion).toBe(v0);
-    });
-
-    test('rerun 0 to 0, should migrate to v0', async () => {
-      let currentVersion = await migrator.getVersion();
-      expect(currentVersion).toBe(v0);
-
-      await migrator.migrateTo(v0, true);
+      await migrator.down(v0);
       currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v0);
     });
@@ -175,7 +166,7 @@ describe('Migration', () => {
       test('from v0 to v3, should migrate to v3', async () => {
         let currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v0);
-        await migrator.migrateTo(v3);
+        await migrator.up(v3);
         currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v3);
       });
@@ -183,7 +174,7 @@ describe('Migration', () => {
       test('from v0 to v4, should migrate to v4', async () => {
         let currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v0);
-        await migrator.migrateTo(v4);
+        await migrator.up(v4);
         currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v4);
       });
@@ -225,29 +216,27 @@ describe('Migration', () => {
         });
       });
 
-      test('from v0 to v5, should stop migration at v4 due to error from v4 to v5', async () => {
+      test('from v0 to v100, should stop due to v100 does not exist', async () => {
         let currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v0);
-        try {
-          await migrator.migrateTo(v5);
-        } catch (e) {
-          expect(e).toBeTruthy();
-          expect(e).toBeInstanceOf(Error);
-        }
+        await expect(migrator.up('100.100.100')).rejects.toThrow();
+        currentVersion = await migrator.getVersion();
+        expect(currentVersion).toBe(v0);
+      });
+
+      test('from v0 to v5, should stop migration at v4 due to error in v5.up', async () => {
+        let currentVersion = await migrator.getVersion();
+        expect(currentVersion).toBe(v0);
+        await expect(migrator.up(v5)).rejects.toThrow();
         currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v4);
       });
 
-      test('from v4 to v3, should stop migration at 4 due to error from v4 to v3', async () => {
-        await migrator.migrateTo(v4);
+      test('from v0 to v4 to v3, should stop migration at v4 due to error in v4.down', async () => {
         let currentVersion = await migrator.getVersion();
-        expect(currentVersion).toBe(v4);
-        try {
-          await migrator.migrateTo(v3);
-        } catch (e) {
-          expect(e).toBeTruthy();
-          expect(e).toBeInstanceOf(Error);
-        }
+        expect(currentVersion).toBe(v0);
+        await migrator.up(v4);
+        await expect(migrator.down(v3)).rejects.toThrow();
         currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v4);
       });

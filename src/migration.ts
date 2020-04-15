@@ -10,16 +10,6 @@
 
   The ordering of migrations is determined by the semver.
 
-  To run migrations using environment variables, set:
-
-  MIGRATE_VERSION to either 'latest' or the version number you want to migrate to.
-  MIGRATE_RERUN to rerun an migration.
-
-  e.g:
-  MIGRATE_VERSION="latest"  # ensure we'll be at the latest version and run the app
-  MIGRATE_VERSION="0.0.2"   # migrate to the specific version
-  MIGRATE_RERUN="true"      # re-run the migration at the version
-
   Note: Migrations will lock ensuring only 1 app can be migrating at once. If
   a migration crashes, the control record in the migrations collection will
   remain locked and at the version it was at previously, however the db could
@@ -32,6 +22,7 @@ import * as semver from 'semver';
 import { typeCheck } from 'type-check';
 
 const check = typeCheck;
+const E_CONFIG_NO_DB = 'Migration is not configured.  Ensure Migration.config() has been called';
 
 export type LogLevels = 'debug' | 'info' | 'notice' | 'warn' | 'error' | 'crit' | 'alert';
 
@@ -148,37 +139,34 @@ export class Migration {
   }
 
   /**
-   * Run the migrations
-   * @param {string} version A semver version or 'latest'
-   * @param {boolean} [rerun] Rerun the migration (default is false)
-   * @example migrateTo('latest') - migrate to latest version
-   * @example migrateTo('0.0.2') - migrate to version '0.0.2'
-   * @example migrateTo('0.0.2', true) - if at version 2, re-run up migration
+   * Perform migrations down to a specific version
+   * @param {string} version A semver version
+   * @example down('1.2.3') - migrate down to version '1.2.3'
    */
-  public async migrateTo(version: string, rerun: boolean = false): Promise<void> {
-    if (!this.db) {
-      throw new Error(
-        'Migration instance has not be configured/initialized.' +
-          ' Call <instance>.config(..) to initialize this instance',
-      );
+  public async down(version: string): Promise<void> {
+    try {
+      await this.execute('down', version);
+    } catch (e) {
+      this.logger('error', `Encountered an error while migrating. Migration failed.`);
+      throw e;
     }
+  }
 
-    let target = version;
+  /**
+   * Perform migrations up to the latest or specific version
+   * @param {string} version A semver version or 'latest'
+   * @example up('latest') - migrate up to latest version
+   * @example up('1.2.3') - migrate up to version '1.2.3'
+   */
+  public async up(version: string | 'latest'): Promise<void> {
+    let targetVersion = version;
 
-    if (target === 'latest') {
-      target = _.last<any>(this.migrations).version;
-    }
-
-    if (!semver.valid(target)) {
-      throw new Error('Invalid semver specified');
-    }
-
-    if (this.migrations.length === 0) {
-      throw new Error('No pending migrations');
+    if (targetVersion === 'latest') {
+      targetVersion = _.last(this.migrations).version;
     }
 
     try {
-      await this.execute(target, rerun);
+      await this.execute('up', targetVersion);
     } catch (e) {
       this.logger('error', `Encountered an error while migrating. Migration failed.`);
       throw e;
@@ -231,7 +219,8 @@ export class Migration {
   }
 
   /**
-   * Reset migration configuration. This is intended for dev and test mode only. Use wisely
+   * Reset migration collection and configuration
+   * Intended for dev and test mode only. Use wisely
    *
    * @returns {Promise<void>}
    * @memberof Migration
@@ -256,135 +245,154 @@ export class Migration {
         console[level](...args);
   }
 
+  private async migrate(direction, idx: number) {
+    const migration = this.migrations[idx];
+
+    if (typeof migration[direction] !== 'function') {
+      this.unlock();
+      throw new Error('Cannot migrate ' + direction + ' on version ' + migration.version);
+    }
+
+    function maybeName() {
+      return migration.name ? ' (' + migration.name + ')' : '';
+    }
+
+    this.logger('info', 'Running ' + direction + '() on version ' + migration.version + maybeName());
+
+    await migration[direction](this.db, this.client, this.logger);
+  }
+
+  // Returns true if lock was acquired.
+  private async _lock(): Promise<boolean> {
+    /*
+     * This is an atomic op. The op ensures only one caller at a time will match the control
+     * object and thus be able to update it.  All other simultaneous callers will not match the
+     * object and thus will have null return values in the result of the operation.
+     */
+    const updateResult = await this.collection.findOneAndUpdate(
+      {
+        _id: 'control',
+        locked: false,
+      },
+      {
+        $set: {
+          locked: true,
+          lockedAt: new Date(),
+        },
+      },
+    );
+
+    return null != updateResult.value && 1 === updateResult.ok;
+  }
+
+  // Side effect: saves version.
+  private _unlock(version: string) {
+    return this.setControl({
+      locked: false,
+      version,
+    });
+  }
+
+  // Side effect: saves version.
+  private _updateVersion(version: string) {
+    return this.setControl({
+      locked: true,
+      version,
+    });
+  }
+
   /**
-   * Migrate to the specific version passed in
+   * Executes migration of the specific version
    *
-   * @private
-   * @param {string} version
-   * @param {boolean} rerun
+   * @param {string} targetVersion
    * @returns {Promise<void>}
    * @memberof Migration
    */
-  private async execute(version: string, rerun: boolean = false): Promise<void> {
-    const self = this;
-    const control = await this.getControl(); // Side effect: upserts control document.
+  private async execute(direction: 'up' | 'down', targetVersion: string): Promise<void> {
+    if (!semver.valid(targetVersion)) {
+      throw new Error(`Invalid semver specified: ${targetVersion}`);
+    }
+
+    if (!this.db) {
+      throw new Error(E_CONFIG_NO_DB);
+    }
+
+    if (this.migrations.length <= 1) {
+      this.logger('warn', 'No migrations are pending');
+      return;
+    }
+
+    // Side effect: upserts control document.
+    const control = await this.getControl();
     let currentVersion = control.version;
 
-    // Run the actual migration
-    const migrate = async (direction, idx: number) => {
-      const migration = self.migrations[idx];
-
-      if (typeof migration[direction] !== 'function') {
-        unlock();
-        throw new Error('Cannot migrate ' + direction + ' on version ' + migration.version);
-      }
-
-      function maybeName() {
-        return migration.name ? ' (' + migration.name + ')' : '';
-      }
-
-      this.logger(
-        'info',
-        'Running ' + direction + '() on version ' + migration.version + maybeName(),
-      );
-
-      await migration[direction](self.db, self.client);
-    };
-
-    // Returns true if lock was acquired.
-    const lock = async () => {
-      /*
-       * This is an atomic op. The op ensures only one caller at a time will match the control
-       * object and thus be able to update it.  All other simultaneous callers will not match the
-       * object and thus will have null return values in the result of the operation.
-       */
-      const updateResult = await self.collection.findOneAndUpdate(
-        {
-          _id: 'control',
-          locked: false,
-        },
-        {
-          $set: {
-            locked: true,
-            lockedAt: new Date(),
-          },
-        },
-      );
-
-      return null != updateResult.value && 1 === updateResult.ok;
-    };
-
-    // Side effect: saves version.
-    const unlock = () =>
-      self.setControl({
-        locked: false,
-        version: currentVersion,
-      });
-
-    // Side effect: saves version.
-    const updateVersion = async () =>
-      await self.setControl({
-        locked: true,
-        version: currentVersion,
-      });
-
-    if ((await lock()) === false) {
+    if ((await this._lock()) === false) {
       this.logger('warn', 'Not migrating, control is locked.');
       return;
     }
 
-    if (rerun) {
-      this.logger('info', 'Rerunning version ' + version);
-      migrate('up', this.findIndexByVersion(version));
-      this.logger('info', 'Finished migrating.');
-      await unlock();
-      return;
-    }
-
-    if (currentVersion === version) {
+    if (currentVersion === targetVersion) {
       if (this.options.logIfLatest) {
-        this.logger('warn', 'Not migrating, already at version ' + version);
+        this.logger('warn', 'Not migrating, already at version ' + targetVersion);
       }
-      await unlock();
+      await this._unlock(currentVersion);
       return;
     }
 
     const startIdx = this.findIndexByVersion(currentVersion);
-    const endIdx = this.findIndexByVersion(version);
+    const endIdx = this.findIndexByVersion(targetVersion);
 
     this.logger(
       'info',
-      'Migrating from version ' +
-        this.migrations[startIdx].version +
-        ' -> ' +
-        this.migrations[endIdx].version,
+      'Migrating ' + direction + ' from version ' + currentVersion + ' -> ' + targetVersion,
     );
 
-    if (currentVersion < version) {
+    if (direction === 'up') {
+      if (semver.gt(currentVersion, targetVersion)) {
+        throw new Error(
+          'Up migration aborted: current version ' +
+            currentVersion +
+            ' > ' +
+            ' target version ' +
+            targetVersion,
+        );
+      }
+
       for (let i = startIdx; i < endIdx; i++) {
         try {
-          await migrate('up', i + 1);
-          currentVersion = self.migrations[i + 1].version;
-          await updateVersion();
+          await this.migrate(direction, i + 1);
+          currentVersion = this.migrations[i + 1].version;
+          await this._updateVersion(currentVersion);
         } catch (e) {
-          const prevVersion = self.migrations[i].version;
-          const destVersion = self.migrations[i + 1].version;
+          const prevVersion = this.migrations[i].version;
+          const destVersion = this.migrations[i + 1].version;
           this.logger(
             'error',
             `Encountered an error while migrating from ${prevVersion} to ${destVersion}`,
+            e.message,
           );
           throw e;
         }
       }
-    } else {
+    } else if (direction === 'down') {
+      if (semver.lt(currentVersion, targetVersion)) {
+        throw new Error(
+          'Down migration aborted: current version ' +
+            currentVersion +
+            ' < ' +
+            ' target version ' +
+            targetVersion,
+        );
+      }
+
       for (let i = startIdx; i > endIdx; i--) {
         try {
-          await migrate('down', i);
-          currentVersion = self.migrations[i - 1].version;
-          await updateVersion();
+          await this.migrate(direction, i);
+          currentVersion = this.migrations[i - 1].version;
+          await this._updateVersion(currentVersion);
         } catch (e) {
-          const prevVersion = self.migrations[i].version;
-          const destVersion = self.migrations[i - 1].version;
+          const prevVersion = this.migrations[i].version;
+          const destVersion = this.migrations[i - 1].version;
           this.logger(
             'error',
             `Encountered an error while migrating from ${prevVersion} to ${destVersion}`,
@@ -394,7 +402,7 @@ export class Migration {
       }
     }
 
-    await unlock();
+    await this.unlock();
 
     this.logger('info', 'Finished migrating.');
   }

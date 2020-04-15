@@ -32,9 +32,9 @@ Migration versions are strings specified using semver _major.minor.patch_ syntax
 Import and use the migration instance - migrator. User the migrator to configure and setup your migration
 
 ```javascript
-import { migrator } from 'migration';
+import { migrator } from 'mgdb-migrator'
 
-migrator.config({
+await migrator.config({
   // false disables logging
   log: true,
   // null or a function
@@ -46,16 +46,16 @@ migrator.config({
   // mongodb connection properties object
   db: {
     // mongodb connection url
-    connectionUrl: "your connection string",
+    connectionUrl: 'your connection string',
     // optional database name, in case using it in connection string is not an option
-    name: "your database name",
+    name: 'your database name',
     // optional mongodb Client options
     options: {
       useNewUrlParser: true,
-      useUnifiedTopology: true,
-    },
+      useUnifiedTopology: true
+    }
   }
-}); // Returns a promise
+}) // Returns a promise
 ```
 
 Or ...
@@ -63,7 +63,7 @@ Or ...
 Define a new instance of migration and configure it as you see fit
 
 ```javascript
-import { Migration } from 'migration';
+import { Migration } from 'mgdb-migrator'
 
 var migrator = new Migration({
   // false disables logging
@@ -77,18 +77,18 @@ var migrator = new Migration({
   // mongodb connection properties object
   db: {
     // mongodb connection url
-    connectionUrl: "your connection string",
+    connectionUrl: 'your connection string',
     // optional database name, in case using it in connection string is not an option
-    name: "your database name",
+    name: 'your database name',
     // optional mongodb Client options
     options: {
       useNewUrlParser: true,
-      useUnifiedTopology: true,
-    },
+      useUnifiedTopology: true
+    }
   }
 })
 
-await migrator.config(); // Returns a promise
+await migrator.config() // Returns a promise
 ```
 
 To write a simple migration, somewhere in the server section of your project define:
@@ -109,7 +109,7 @@ migrator.add({
 To run this migration to the latest version:
 
 ```javascript
-migrator.migrateTo('latest')
+migrator.up('latest')
 ```
 
 ### Advanced
@@ -166,28 +166,23 @@ migrator.add({
 As in 'Basics', you can migrate to the latest by running:
 
 ```javascript
-migrator.migrateTo('latest')
+migrator.up('latest')
 ```
 
-By specifying a version, you can migrate directly to that version (if possible). The migration system will automatically determine which direction to migrate in.
-
+By specifying a version, you can migrate directly to that version (if possible).
 In the above example, you could migrate directly to version 1.1.2 by running:
 
 ```javascript
-migrator.migrateTo('1.1.2')
+migrator.up('1.1.2')
 ```
 
 If you wanted to undo all of your migrations, you could migrate back down to version 0.0.0 by running:
 
 ```javascript
-migrator.migrateTo('0.0.0')
+migrator.down('0.0.0')
 ```
 
-Sometimes (usually when somethings gone awry), you may need to re-run a migration. You can do this with the rerun argument, like:
-
-```javascript
-migrator.migrateTo('0.0.3', true)
-```
+Sometimes (usually when something goes awry), you may need to retry a migration. You can do this by updating the `migrations.version` field in mongodb to the previous version and re-executing your migration.
 
 To see what version the database is at, call:
 
@@ -207,12 +202,54 @@ To close the mongodb connection, call:
 migrator.close()
 ```
 
+### Using MongoDB Transactions API
+
+You can make use of the [MongoDB Transaction API](https://docs.mongodb.com/manual/core/transactions/) in your migration scripts.
+
+Note: this requires
+
+- MongoDB 4.0 or higher
+
+`migrator` will call your migration `up` and `down` function with a second argument: `client`, a [MongoClient](https://mongodb.github.io/node-mongodb-native/3.3/api/MongoClient.html) instance to give you access to the `startSession` function.
+
+Example:
+
+```javascript
+module.exports = {
+  async up(db, client) {
+    const session = client.startSession()
+    try {
+      await session.withTransaction(async () => {
+        await db
+          .collection('albums')
+          .updateOne({ artist: 'The Beatles' }, { $set: { blacklisted: true } })
+        await db.collection('albums').updateOne({ artist: 'The Doors' }, { $set: { stars: 5 } })
+      })
+    } finally {
+      await session.endSession()
+    }
+  },
+
+  async down(db, client) {
+    const session = client.startSession()
+    try {
+      await session.withTransaction(async () => {
+        await db
+          .collection('albums')
+          .updateOne({ artist: 'The Beatles' }, { $set: { blacklisted: false } })
+        await db.collection('albums').updateOne({ artist: 'The Doors' }, { $set: { stars: 0 } })
+      })
+    } finally {
+      await session.endSession()
+    }
+  }
+}
+```
+
 **IMPORTANT**:
 
-- You cannot create your own migration at version 0.0.0. This version is reserved by migration for
-  a 'vanilla' system, that is, one without any migrations applied.
-- If migrating from vT1 to vTz and migration fails from a vTx to vTy, where vTx & vTy are incremental versions
-  between vT1 to vTz, migration will stop at vTx.
+- You cannot create your own migration at version 0.0.0. This version is reserved by `migrator` for initial state when no migrations have been applied.
+- If migrating from vTa to vTz and migration fails from a vTx to vTy, where vTx & vTy are incremental versions between vTa to vTz, migration will stop at vTx.
 - Prefer an async function (async | promise) for both up()/down() setup. This will ensure migration completes before version bump during execution.
 
 ### Configuration
