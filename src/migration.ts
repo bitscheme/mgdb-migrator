@@ -1,30 +1,8 @@
-/*
-  Adds migration capabilities. Migrations are defined like:
-
-  Migrations.add({
-    version: '0.0.1', //*required* semver to identify migration version
-    up: function(db) {}, //*required* code to run to migrate upwards
-    down: function(db) {}, //*required* code to run to migrate downwards
-    name: 'Something' //*optional* display name for the migration
-  });
-
-  The ordering of migrations is determined by the semver.
-
-  Note: Migrations will lock ensuring only 1 app can be migrating at once. If
-  a migration crashes, the control record in the migrations collection will
-  remain locked and at the version it was at previously, however the db could
-  be in an inconsistent state.
-*/
-
-import * as _ from 'lodash';
+import { last } from 'lodash';
 import { Collection, Db, MongoClient, MongoClientOptions } from 'mongodb';
 import * as semver from 'semver';
-import { typeCheck } from 'type-check';
 
-const check = typeCheck;
 const E_CONFIG_NO_DB = 'Migration is not configured.  Ensure Migration.config() has been called';
-
-export type LogLevels = 'debug' | 'info' | 'notice' | 'warn' | 'error' | 'crit' | 'alert';
 
 export interface IDbProperties {
   connectionUrl: string;
@@ -34,7 +12,7 @@ export interface IDbProperties {
 
 export interface IMigrationOptions {
   log?: boolean;
-  logger?: (level: LogLevels, ...args: any[]) => void;
+  logger?: (level: string, ...args: any[]) => void;
   logIfLatest?: boolean;
   collectionName?: string;
   db: IDbProperties;
@@ -64,9 +42,7 @@ export class Migration {
   private options: IMigrationOptions;
 
   /**
-   * Creates an instance of Migration.
-   * @param {IMigrationOptions} [opts]
-   * @memberof Migration
+   * Creates an instance of Migration
    */
   constructor(opts?: IMigrationOptions) {
     // Since we'll be at version 0.0.0 by default, we should have a migration set for it.
@@ -89,10 +65,6 @@ export class Migration {
 
   /**
    * Configure migration
-   *
-   * @param {IMigrationOptions} [opts]
-   * @returns {Promise<void>}
-   * @memberof Migration
    */
   public async config(opts?: IMigrationOptions): Promise<void> {
     this.options = Object.assign({}, this.options, opts);
@@ -110,9 +82,6 @@ export class Migration {
 
   /**
    * Add a new migration
-   *
-   * @param {IMigration} migration
-   * @memberof Migration
    */
   public add(migration: IMigration): void {
     if (typeof migration.up !== 'function') {
@@ -162,7 +131,7 @@ export class Migration {
     let targetVersion = version;
 
     if (targetVersion === 'latest') {
-      targetVersion = _.last(this.migrations).version;
+      targetVersion = last(this.migrations).version;
     }
 
     try {
@@ -187,9 +156,6 @@ export class Migration {
 
   /**
    * Returns the migrations
-   *
-   * @returns {IMigration[]}
-   * @memberof Migration
    */
   public getMigrations(): IMigration[] {
     // Exclude default/base migration v0 since its not a configured migration
@@ -198,9 +164,6 @@ export class Migration {
 
   /**
    * Returns the current version
-   *
-   * @returns {Promise<string>}
-   * @memberof Migration
    */
   public async getVersion(): Promise<string> {
     const control = await this.getControl();
@@ -210,9 +173,6 @@ export class Migration {
 
   /**
    * Unlock control
-   *
-   * @returns {Promise<void>}
-   * @memberof Migration
    */
   public async unlock(): Promise<void> {
     await this.collection.updateOne({ _id: 'control' }, { $set: { locked: false } });
@@ -221,9 +181,6 @@ export class Migration {
   /**
    * Reset migration collection and configuration
    * Intended for dev and test mode only. Use wisely
-   *
-   * @returns {Promise<void>}
-   * @memberof Migration
    */
   public async reset(): Promise<void> {
     this.migrations = [this.initialMigration];
@@ -234,7 +191,7 @@ export class Migration {
   /**
    * Logger
    */
-  private logger(level: LogLevels, ...args: any[]): void {
+  private logger(level: string, ...args: any[]): void {
     if (this.options.log === false) {
       return;
     }
@@ -262,7 +219,9 @@ export class Migration {
     await migration[direction](this.db, this.client, this.logger);
   }
 
-  // Returns true if lock was acquired.
+  /**
+   * Returns true if lock was acquired.
+   */
   private async _lock(): Promise<boolean> {
     /*
      * This is an atomic op. The op ensures only one caller at a time will match the control
@@ -303,10 +262,6 @@ export class Migration {
 
   /**
    * Executes migration of the specific version
-   *
-   * @param {string} targetVersion
-   * @returns {Promise<void>}
-   * @memberof Migration
    */
   private async execute(direction: 'up' | 'down', targetVersion: string): Promise<void> {
     if (!semver.valid(targetVersion)) {
@@ -409,10 +364,6 @@ export class Migration {
 
   /**
    * Gets the current control record, optionally creating it if non-existent
-   *
-   * @private
-   * @returns {Promise<{ version: string, locked: boolean }>}
-   * @memberof Migration
    */
   private async getControl(): Promise<{ version: string; locked: boolean }> {
     const con = await this.collection.findOne({ _id: 'control' });
@@ -428,20 +379,11 @@ export class Migration {
 
   /**
    * Set the control record
-   *
-   * @private
-   * @param {{ version: string, locked: boolean }} control
-   * @returns {(Promise<{ version: string, locked: boolean } | null>)}
-   * @memberof Migration
    */
   private async setControl(control: {
     version: string
     locked: boolean,
   }): Promise<{ version: string; locked: boolean } | null> {
-    // Be quite strict
-    check('String', control.version);
-    check('Boolean', control.locked);
-
     const updateResult = await this.collection.updateOne(
       {
         _id: 'control',
@@ -466,11 +408,6 @@ export class Migration {
 
   /**
    * Returns the migration index in _list or throws if not found
-   *
-   * @private
-   * @param {string} version
-   * @returns {number}
-   * @memberof Migration
    */
   private findIndexByVersion(version: string): number {
     for (let i = 0; i < this.migrations.length; i++) {

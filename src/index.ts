@@ -1,5 +1,5 @@
-import { IMigrationOptions, LogLevels, Migration } from './migration';
+import { IMigrationOptions, Migration } from './migration';
 
 const migrator = new Migration();
 
-export { migrator, Migration, IMigrationOptions, LogLevels };
+export { migrator, Migration, IMigrationOptions };

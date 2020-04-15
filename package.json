@@ -52,8 +52,7 @@
   },
   "dependencies": {
     "lodash": "4.17.15",
-    "semver": "7.3.0",
-    "type-check": "0.4.0"
+    "semver": "7.3.0"
   },
   "peerDependencies": {
     "mongodb": ">=3.0"
