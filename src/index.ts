@@ -1,4 +1,4 @@
-import { IMigrationOptions, Migration, SyslogLevels } from './migration';
+import { IMigrationOptions, LogLevels, Migration } from './migration';
 
 const migrator = new Migration();
 
@@ -9,4 +9,4 @@ if (version) {
   migrator.migrateTo(version, rerun);
 }
 
-export { migrator, Migration, IMigrationOptions, SyslogLevels };
+export { migrator, Migration, IMigrationOptions, LogLevels };

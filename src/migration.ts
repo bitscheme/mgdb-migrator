@@ -33,7 +33,7 @@ import { typeCheck } from 'type-check';
 
 const check = typeCheck;
 
-export type SyslogLevels = 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'crit' | 'alert';
+export type LogLevels = 'debug' | 'info' | 'notice' | 'warn' | 'error' | 'crit' | 'alert';
 
 export interface IDbProperties {
   connectionUrl: string;
@@ -43,7 +43,7 @@ export interface IDbProperties {
 
 export interface IMigrationOptions {
   log?: boolean;
-  logger?: (level: SyslogLevels, ...args: any[]) => void;
+  logger?: (level: LogLevels, ...args: any[]) => void;
   logIfLatest?: boolean;
   collectionName?: string;
   db: IDbProperties;
@@ -106,21 +106,13 @@ export class Migration {
   public async config(opts?: IMigrationOptions): Promise<void> {
     this.options = Object.assign({}, this.options, opts);
 
-    if (!this.options.logger && this.options.log) {
-      // tslint:disable-next-line:no-console
-      this.options.logger = (level: string, ...args) => console.log(level, ...args);
+    const clientOptions = { ...this.options.db.options };
+
+    if (clientOptions.useNewUrlParser !== false) {
+      clientOptions.useNewUrlParser = true;
     }
 
-    if (this.options.log === false) {
-      // tslint:disable-next-line:no-empty
-      this.options.logger = (level: string, ...args) => {};
-    }
-
-    const dbOptions = { ...this.options.db.options };
-    if (dbOptions.useNewUrlParser !== false) {
-      dbOptions.useNewUrlParser = true;
-    }
-    this.client = await MongoClient.connect(this.options.db.connectionUrl, dbOptions);
+    this.client = await MongoClient.connect(this.options.db.connectionUrl, clientOptions);
     this.db = this.client.db(this.options.db.name || undefined);
     this.collection = this.db.collection(this.options.collectionName);
   }
@@ -188,7 +180,7 @@ export class Migration {
     try {
       await this.execute(target, rerun);
     } catch (e) {
-      this.options.logger('error', `Encountered an error while migrating. Migration failed.`);
+      this.logger('error', `Encountered an error while migrating. Migration failed.`);
       throw e;
     }
   }
@@ -251,6 +243,20 @@ export class Migration {
   }
 
   /**
+   * Logger
+   */
+  private logger(level: LogLevels, ...args: any[]): void {
+    if (this.options.log === false) {
+      return;
+    }
+
+    this.options.logger
+      ? this.options.logger(level, ...args)
+      : // tslint:disable-next-line:no-console
+        console[level](...args);
+  }
+
+  /**
    * Migrate to the specific version passed in
    *
    * @private
@@ -277,7 +283,7 @@ export class Migration {
         return migration.name ? ' (' + migration.name + ')' : '';
       }
 
-      this.options.logger(
+      this.logger(
         'info',
         'Running ' + direction + '() on version ' + migration.version + maybeName(),
       );
@@ -323,21 +329,21 @@ export class Migration {
       });
 
     if ((await lock()) === false) {
-      this.options.logger('info', 'Not migrating, control is locked.');
+      this.logger('warn', 'Not migrating, control is locked.');
       return;
     }
 
     if (rerun) {
-      this.options.logger('info', 'Rerunning version ' + version);
+      this.logger('info', 'Rerunning version ' + version);
       migrate('up', this.findIndexByVersion(version));
-      this.options.logger('info', 'Finished migrating.');
+      this.logger('info', 'Finished migrating.');
       await unlock();
       return;
     }
 
     if (currentVersion === version) {
       if (this.options.logIfLatest) {
-        this.options.logger('info', 'Not migrating, already at version ' + version);
+        this.logger('warn', 'Not migrating, already at version ' + version);
       }
       await unlock();
       return;
@@ -346,8 +352,7 @@ export class Migration {
     const startIdx = this.findIndexByVersion(currentVersion);
     const endIdx = this.findIndexByVersion(version);
 
-    // Log.info('startIdx:' + startIdx + ' endIdx:' + endIdx);
-    this.options.logger(
+    this.logger(
       'info',
       'Migrating from version ' +
         this.migrations[startIdx].version +
@@ -364,7 +369,7 @@ export class Migration {
         } catch (e) {
           const prevVersion = self.migrations[i].version;
           const destVersion = self.migrations[i + 1].version;
-          this.options.logger(
+          this.logger(
             'error',
             `Encountered an error while migrating from ${prevVersion} to ${destVersion}`,
           );
@@ -380,7 +385,7 @@ export class Migration {
         } catch (e) {
           const prevVersion = self.migrations[i].version;
           const destVersion = self.migrations[i - 1].version;
-          this.options.logger(
+          this.logger(
             'error',
             `Encountered an error while migrating from ${prevVersion} to ${destVersion}`,
           );
@@ -390,7 +395,8 @@ export class Migration {
     }
 
     await unlock();
-    this.options.logger('info', 'Finished migrating.');
+
+    this.logger('info', 'Finished migrating.');
   }
 
   /**
