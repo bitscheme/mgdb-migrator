@@ -13,25 +13,33 @@ export interface IDbProperties {
 export interface IMigrationOptions {
   log?: boolean;
   logger?: (level: string, ...args: any[]) => void;
-  logIfLatest?: boolean;
   collectionName?: string;
   db: IDbProperties;
 }
+
 export interface IMigration {
   version: string;
   name: string;
-  up: (db: Db, client: MongoClient) => Promise<any> | any;
-  down: (db: Db, client: MongoClient) => Promise<any> | any;
+  up: (
+    db?: Db,
+    client?: MongoClient,
+    logger?: (level: string, ...args: any[]) => void,
+  ) => Promise<any> | any;
+  down: (
+    db?: Db,
+    client?: MongoClient,
+    logger?: (level: string, ...args: any[]) => void,
+  ) => Promise<any> | any;
 }
 
 export class Migration {
   private initialMigration: IMigration = {
     version: '0.0.0',
     name: 'v0',
-    up: () => {
+    up: async () => {
       //
     },
-    down: () => {
+    down: async () => {
       //
     },
   };
@@ -44,29 +52,20 @@ export class Migration {
   /**
    * Creates an instance of Migration
    */
-  constructor(opts?: IMigrationOptions) {
-    // Since we'll be at version 0.0.0 by default, we should have a migration set for it.
+  constructor() {
     this.migrations = [this.initialMigration];
-    this.options = opts
-      ? opts
-      : {
-          // False disables logging
-          log: true,
-          // Null or a function
-          logger: null,
-          // Enable/disable info log "already at latest."
-          logIfLatest: true,
-          // Migrations collection name
-          collectionName: 'migrations',
-          // Mongodb url or mongo Db instance
-          db: null,
-        };
+    this.options = {
+      log: true,
+      logger: null,
+      collectionName: 'migrations',
+      db: null,
+    };
   }
 
   /**
    * Configure migration
    */
-  public async config(opts?: IMigrationOptions): Promise<void> {
+  public async config(opts: IMigrationOptions): Promise<void> {
     this.options = Object.assign({}, this.options, opts);
 
     const clientOptions = { ...this.options.db.options };
@@ -85,19 +84,19 @@ export class Migration {
    */
   public add(migration: IMigration): void {
     if (typeof migration.up !== 'function') {
-      throw new Error('Migration must supply an up function.');
+      throw new Error('migration must supply an up function');
     }
 
     if (typeof migration.down !== 'function') {
-      throw new Error('Migration must supply a down function.');
+      throw new Error('migration must supply a down function');
     }
 
     if (typeof migration.version !== 'string' || !semver.valid(migration.version)) {
-      throw new Error('Migration must supply a SemVer version string.');
+      throw new Error('migration must supply a SemVer version string');
     }
 
     if (semver.lte(migration.version, '0.0.0')) {
-      throw new Error('Migration version must be greater than 0.0.0');
+      throw new Error('migration version must be greater than 0.0.0');
     }
 
     // Freeze the migration object to make it hereafter immutable
@@ -109,21 +108,23 @@ export class Migration {
 
   /**
    * Perform migrations down to a specific version
-   * @param {string} version A semver version
    * @example down('1.2.3') - migrate down to version '1.2.3'
    */
   public async down(version: string): Promise<void> {
     try {
+      await this._lock();
       await this.execute('down', version);
     } catch (e) {
-      this.logger('error', `Encountered an error while migrating. Migration failed.`);
+      this.logger('error', `migration failed:`, e.message);
+
       throw e;
+    } finally {
+      await this.unlock();
     }
   }
 
   /**
    * Perform migrations up to the latest or specific version
-   * @param {string} version A semver version or 'latest'
    * @example up('latest') - migrate up to latest version
    * @example up('1.2.3') - migrate up to version '1.2.3'
    */
@@ -135,18 +136,19 @@ export class Migration {
     }
 
     try {
+      await this._lock();
       await this.execute('up', targetVersion);
     } catch (e) {
-      this.logger('error', `Encountered an error while migrating. Migration failed.`);
+      this.logger('error', `migration failed:`, e.message);
+
       throw e;
+    } finally {
+      await this.unlock();
     }
   }
 
   /**
    * Closes the connection
-   *
-   * @returns {Promise<void>}
-   * @memberof Migration
    */
   public async close(force: boolean = false): Promise<void> {
     if (this.client) {
@@ -205,16 +207,11 @@ export class Migration {
   private async migrate(direction, idx: number) {
     const migration = this.migrations[idx];
 
-    if (typeof migration[direction] !== 'function') {
-      this.unlock();
-      throw new Error('Cannot migrate ' + direction + ' on version ' + migration.version);
-    }
-
-    function maybeName() {
-      return migration.name ? ' (' + migration.name + ')' : '';
-    }
-
-    this.logger('info', 'Running ' + direction + '() on version ' + migration.version + maybeName());
+    this.logger(
+      'info',
+      `running migration ${direction}() on version ${migration.version}`,
+      `${migration.name || ''}`,
+    );
 
     await migration[direction](this.db, this.client, this.logger);
   }
@@ -265,7 +262,7 @@ export class Migration {
    */
   private async execute(direction: 'up' | 'down', targetVersion: string): Promise<void> {
     if (!semver.valid(targetVersion)) {
-      throw new Error(`Invalid semver specified: ${targetVersion}`);
+      throw new Error(`invalid semver: ${targetVersion}`);
     }
 
     if (!this.db) {
@@ -273,7 +270,7 @@ export class Migration {
     }
 
     if (this.migrations.length <= 1) {
-      this.logger('warn', 'No migrations are pending');
+      this.logger('warn', 'no migrations are pending');
       return;
     }
 
@@ -281,85 +278,51 @@ export class Migration {
     const control = await this.getControl();
     let currentVersion = control.version;
 
-    if ((await this._lock()) === false) {
-      this.logger('warn', 'Not migrating, control is locked.');
-      return;
-    }
-
-    if (currentVersion === targetVersion) {
-      if (this.options.logIfLatest) {
-        this.logger('warn', 'Not migrating, already at version ' + targetVersion);
-      }
-      await this._unlock(currentVersion);
+    if (semver.eq(currentVersion, targetVersion)) {
+      this.logger('warn', 'migration already at version ' + targetVersion);
       return;
     }
 
     const startIdx = this.findIndexByVersion(currentVersion);
     const endIdx = this.findIndexByVersion(targetVersion);
 
-    this.logger(
-      'info',
-      'Migrating ' + direction + ' from version ' + currentVersion + ' -> ' + targetVersion,
-    );
+    this.logger('info', `${direction} migration started from ${currentVersion} to ${targetVersion}`);
 
     if (direction === 'up') {
       if (semver.gt(currentVersion, targetVersion)) {
-        throw new Error(
-          'Up migration aborted: current version ' +
-            currentVersion +
-            ' > ' +
-            ' target version ' +
-            targetVersion,
-        );
+        throw new Error(`current version ${currentVersion} > target version ${targetVersion}`);
       }
 
       for (let i = startIdx; i < endIdx; i++) {
         try {
           await this.migrate(direction, i + 1);
           currentVersion = this.migrations[i + 1].version;
+          this.logger('info', `migration ${currentVersion} completed`);
           await this._updateVersion(currentVersion);
         } catch (e) {
-          const prevVersion = this.migrations[i].version;
+          const previousVersion = this.migrations[i].version;
           const destVersion = this.migrations[i + 1].version;
-          this.logger(
-            'error',
-            `Encountered an error while migrating from ${prevVersion} to ${destVersion}`,
-            e.message,
-          );
-          throw e;
+          throw new Error(`migration from ${previousVersion} to ${destVersion}: ${e.message}`);
         }
       }
     } else if (direction === 'down') {
       if (semver.lt(currentVersion, targetVersion)) {
-        throw new Error(
-          'Down migration aborted: current version ' +
-            currentVersion +
-            ' < ' +
-            ' target version ' +
-            targetVersion,
-        );
+        throw new Error(`current version ${currentVersion} < target version ${targetVersion}`);
       }
 
       for (let i = startIdx; i > endIdx; i--) {
         try {
           await this.migrate(direction, i);
           currentVersion = this.migrations[i - 1].version;
+          this.logger('info', `migration ${currentVersion} completed`);
           await this._updateVersion(currentVersion);
         } catch (e) {
-          const prevVersion = this.migrations[i].version;
+          const previousVersion = this.migrations[i].version;
           const destVersion = this.migrations[i - 1].version;
-          this.logger(
-            'error',
-            `Encountered an error while migrating from ${prevVersion} to ${destVersion}`,
-          );
-          throw e;
+          throw new Error(`migration from ${previousVersion} to ${destVersion}: ${e.message}`);
         }
       }
     }
-
-    await this.unlock();
-
-    this.logger('info', 'Finished migrating.');
   }
 
   /**
@@ -416,6 +379,6 @@ export class Migration {
       }
     }
 
-    throw new Error('Migration version ' + version + ' not found');
+    throw new Error(`migration version ${version} not found`);
   }
 }

@@ -1,6 +1,5 @@
-import { Migration } from '../src/';
+import { migrator } from '../src/';
 
-const dbURL = process.env.DBURL;
 const v0 = '0.0.0';
 const v1 = '0.0.1';
 const v2 = '0.1.2';
@@ -9,17 +8,13 @@ const v4 = '1.0.4';
 const v5 = '100.0.5';
 
 describe('Migration', () => {
-  let migrator: Migration;
-
   beforeAll(async () => {
     try {
-      migrator = new Migration({
+      await migrator.config({
         log: true,
-        logIfLatest: true,
         collectionName: '_migration',
-        db: { connectionUrl: dbURL },
+        db: { connectionUrl: process.env.DB_URL },
       });
-      await migrator.config();
     } catch (e) {
       throw e;
     }
