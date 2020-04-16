@@ -2,10 +2,10 @@ A simple migration system for mongodb supporting up/downwards migrations.
 
 ## Status
 
-| Branch |                                                    Status                                                     |
-| ------ | :-----------------------------------------------------------------------------------------------------------: |
-| Next   |  ![CI Workflow](https://github.com/emmanuelbuah/mgdb-migrator/workflows/CI%20Workflow/badge.svg?branch=next)  |
-| Master | ![CI Workflow](https://github.com/emmanuelbuah/mgdb-migrator/workflows/CI%20Workflow/badge.svg?branch=master) |
+| Branch |                                                   Status                                                   |
+| ------ | :--------------------------------------------------------------------------------------------------------: |
+| Next   |  ![CI Workflow](https://github.com/bitscheme/mgdb-migrator/workflows/CI%20Workflow/badge.svg?branch=next)  |
+| Master | ![CI Workflow](https://github.com/bitscheme/mgdb-migrator/workflows/CI%20Workflow/badge.svg?branch=master) |
 
 ## Install
 
@@ -100,7 +100,7 @@ If any particular migration rejects or throws an error, subsequent migrations ar
 
 ### `config(opts: IMigrationOptions) ⇒ Promise<void>`
 
-User the `migrator` to configure and setup your migrations:
+See the [Quick Start](#quick-start) for options.
 
 ### `add(migration: IMigration)`
 
