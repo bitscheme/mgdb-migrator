@@ -207,61 +207,36 @@ const albumMigration = {
 }
 ```
 
-### Configuration
-
-You can configure Migration with the `config` method. Defaults are:
-
-```javascript
-migrator.config({
-  // Log job run details to console
-  log: true,
-  // Use a custom logger function (level, ...args) => void
-  logger: null,
-  // Enable/disable logging "Not migrating, already at version {number}"
-  logIfLatest: true,
-  // migrations collection name to use in the database
-  collectionName: "migrations"
-  // mongodb connection properties object or mongo Db instance
-  db: {
-    // mongodb connection url
-    connectionUrl: "your connection string",
-    // optional database name, in case using it in connection string is not an option
-    name: null,
-    // optional mongodb Client options
-    options: null,
-  }
-});
-```
-
 ### Logging
 
-Migrations uses console by default for logging if not provided. If you want to use your
-own logger (for sending to other consumers or similar) you can do so by
-configuring the `logger` option when calling `migrator.config` .
+Migrations uses the console by default for logging if not provided. If you want to use your own logger (for sending to other consumers or similar) you can do so by
+configuring the `logger` option when calling `migrator.config`.
 
-Migrations expects a function as `logger`, and will pass an argument with properties level, message,
-to it for
-you to take action on.
+Log levels conform to those in node.js [Console](https://nodejs.org/api/console.html) API.
 
 ```javascript
-var MyLogger = function(opts) {
-  console.log('Level', opts.level);
-  console.log('Message', opts.message);
+import { createLogger } from 'winston';
+
+const logger = createLogger({
+  transports: [
+    new winston.transports.Console();
+  ]
+});
+
+const myLogger = (level, message) => {
+  logger.log({
+    level,
+    message
+  });
 }
 
-Migrations.config({
+migrator.config({
   ...
-  logger: MyLogger
+  logger: myLogger
   ...
 });
 
 ```
-
-The `opts` object passed to `MyLogger` above includes `level`, `message`, and any other additional
-info needed.
-
-- `level` will be one of `info`, `warn`, `error`, `debug`.
-- `message` is something like `Finished migrating.`.
 
 ## Development
 
