@@ -111,7 +111,7 @@ describe('Migration', () => {
     test('from v0 to v2, should migrate to latest', async () => {
       let currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v0);
-      await migrator.up('latest');
+      await migrator.up();
       currentVersion = await migrator.getVersion();
       expect(currentVersion).toBe(v2);
     });

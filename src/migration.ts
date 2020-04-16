@@ -127,16 +127,12 @@ export class Migration {
   }
 
   /**
-   * Perform migrations up to the latest or specific version
-   * @example up('latest') - migrate up to latest version
+   * Perform migrations up to the latest or specific configured version
+   * @example up() - migrate up to latest version
    * @example up('1.2.3') - migrate up to version '1.2.3'
    */
-  public async up(version: string | 'latest'): Promise<void> {
-    let targetVersion = version;
-
-    if (targetVersion === 'latest') {
-      targetVersion = last(this.migrations).version;
-    }
+  public async up(version?: string): Promise<void> {
+    const targetVersion = version || last(this.migrations).version;
 
     try {
       await this.lock();
