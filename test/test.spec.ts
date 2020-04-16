@@ -13,7 +13,10 @@ describe('Migration', () => {
       await migrator.config({
         log: true,
         collectionName: '_migration',
-        db: { connectionUrl: process.env.DB_URL },
+        db: {
+          connectionUrl: process.env.DB_URL,
+          options: { useUnifiedTopology: true },
+        },
       });
     } catch (e) {
       throw e;
@@ -24,7 +27,7 @@ describe('Migration', () => {
     migrator.add({
       version: v1,
       name: 'v1',
-      up: () => {
+      up: async () => {
         //
       },
       down: () => {

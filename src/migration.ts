@@ -1,5 +1,6 @@
 import { last } from 'lodash';
 import { Collection, Db, MongoClient, MongoClientOptions } from 'mongodb';
+import pTimeout, { TimeoutError } from 'p-timeout';
 import * as semver from 'semver';
 
 const E_CONFIG_NO_DB = 'Migration is not configured.  Ensure Migration.config() has been called';
@@ -15,6 +16,7 @@ export interface IMigrationOptions {
   logger?: (level: string, ...args: any[]) => void;
   collectionName?: string;
   db: IDbProperties;
+  timeout?: number;
 }
 
 export interface IMigration {
@@ -59,6 +61,7 @@ export class Migration {
       logger: null,
       collectionName: 'migrations',
       db: null,
+      timeout: Number.POSITIVE_INFINITY,
     };
   }
 
@@ -112,7 +115,7 @@ export class Migration {
    */
   public async down(version: string): Promise<void> {
     try {
-      await this._lock();
+      await this.lock();
       await this.execute('down', version);
     } catch (e) {
       this.logger('error', `migration failed:`, e.message);
@@ -136,7 +139,7 @@ export class Migration {
     }
 
     try {
-      await this._lock();
+      await this.lock();
       await this.execute('up', targetVersion);
     } catch (e) {
       this.logger('error', `migration failed:`, e.message);
@@ -174,13 +177,6 @@ export class Migration {
   }
 
   /**
-   * Unlock control
-   */
-  public async unlock(): Promise<void> {
-    await this.collection.updateOne({ _id: 'control' }, { $set: { locked: false } });
-  }
-
-  /**
    * Reset migration collection and configuration
    * Intended for dev and test mode only. Use wisely
    */
@@ -198,12 +194,12 @@ export class Migration {
       return;
     }
 
-    this.options.logger
-      ? this.options.logger(level, ...args)
-      : // tslint:disable-next-line:no-console
-        console[level](...args);
+    this.options.logger ? this.options.logger(level, ...args) : console[level](...args);
   }
 
+  /**
+   * Invoke the migration
+   */
   private async migrate(direction, idx: number) {
     const migration = this.migrations[idx];
 
@@ -213,13 +209,16 @@ export class Migration {
       `${migration.name || ''}`,
     );
 
-    await migration[direction](this.db, this.client, this.logger);
+    // Wrap in a promise in case migration is not promise-able
+    const p = Promise.resolve(migration[direction](this.db, this.client, this.logger));
+
+    await pTimeout(p, this.options.timeout);
   }
 
   /**
    * Returns true if lock was acquired.
    */
-  private async _lock(): Promise<boolean> {
+  private async lock(): Promise<boolean> {
     /*
      * This is an atomic op. The op ensures only one caller at a time will match the control
      * object and thus be able to update it.  All other simultaneous callers will not match the
@@ -241,16 +240,20 @@ export class Migration {
     return null != updateResult.value && 1 === updateResult.ok;
   }
 
-  // Side effect: saves version.
-  private _unlock(version: string) {
-    return this.setControl({
-      locked: false,
-      version,
-    });
+  /**
+   * Unlock control
+   */
+  private async unlock(): Promise<void> {
+    await this.collection.updateOne(
+      {
+        _id: 'control',
+      },
+      { $set: { locked: false } },
+    );
   }
 
   // Side effect: saves version.
-  private _updateVersion(version: string) {
+  private updateVersion(version: string) {
     return this.setControl({
       locked: true,
       version,
@@ -298,7 +301,7 @@ export class Migration {
           await this.migrate(direction, i + 1);
           currentVersion = this.migrations[i + 1].version;
           this.logger('info', `migration ${currentVersion} completed`);
-          await this._updateVersion(currentVersion);
+          await this.updateVersion(currentVersion);
         } catch (e) {
           const previousVersion = this.migrations[i].version;
           const destVersion = this.migrations[i + 1].version;
@@ -315,7 +318,7 @@ export class Migration {
           await this.migrate(direction, i);
           currentVersion = this.migrations[i - 1].version;
           this.logger('info', `migration ${currentVersion} completed`);
-          await this._updateVersion(currentVersion);
+          await this.updateVersion(currentVersion);
         } catch (e) {
           const previousVersion = this.migrations[i].version;
           const destVersion = this.migrations[i - 1].version;
@@ -370,7 +373,7 @@ export class Migration {
   }
 
   /**
-   * Returns the migration index in _list or throws if not found
+   * Returns the migration index or throws if not found
    */
   private findIndexByVersion(version: string): number {
     for (let i = 0; i < this.migrations.length; i++) {

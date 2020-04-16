@@ -7,12 +7,10 @@ A simple migration system for mongodb supporting up/downwards migrations.
 | Next   |  ![CI Workflow](https://github.com/emmanuelbuah/mgdb-migrator/workflows/CI%20Workflow/badge.svg?branch=next)  |
 | Master | ![CI Workflow](https://github.com/emmanuelbuah/mgdb-migrator/workflows/CI%20Workflow/badge.svg?branch=master) |
 
-## Installation
-
-Migrations can be installed through yarn or npm. Type:
+## Install
 
 ```sh
-$ npm install mgdb-migrator
+$ npm i mgdb-migrator
 ```
 
 or
@@ -21,66 +19,27 @@ or
 $ yarn add mgdb-migrator
 ```
 
-## API
+## Quick Start
 
-### Versioning
-
-Migration versions are strings specified using semver _major.minor.patch_ syntax (e.g. '1.2.3') and follow the precedence rules concerning order. They must be exact versions as ranges are not allowed. See [semver](https://www.npmjs.com/package/semver) for more information.
-
-### Basics
-
-Import and use the migration instance - migrator. User the migrator to configure and setup your migration
-
-```javascript
+```js
 import { migrator } from 'mgdb-migrator'
 
 await migrator.config({
   // false disables logging
   log: true,
-  // null or a function
+  // optional logging function
   logger: (level, ...args) => console.log(level, ...args),
-  // enable/disable info log "already at latest."
-  logIfLatest: true,
-  // migrations collection name. Defaults to 'migrations'
+  // migrations collection name defaults to 'migrations'
   collectionName: 'migrations',
-  // mongodb connection properties object
+  // max time allowed in ms for a migration to finish, default Number.POSITIVE_INFINITY
+  timeout: 30000,
+  // connection properties object
   db: {
     // mongodb connection url
-    connectionUrl: 'your connection string',
+    connectionUrl: 'mongodb://localhost:27017/my-db',
     // optional database name, in case using it in connection string is not an option
-    name: 'your database name',
-    // optional mongodb Client options
-    options: {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    }
-  }
-}) // Returns a promise
-```
-
-Or ...
-
-Define a new instance of migration and configure it as you see fit
-
-```javascript
-import { Migration } from 'mgdb-migrator'
-
-var migrator = new Migration({
-  // false disables logging
-  log: true,
-  // null or a function
-  logger: (level, ...args) => console.log(level, ...args),
-  // enable/disable info log "already at latest."
-  logIfLatest: true,
-  // migrations collection name
-  collectionName: 'migrations',
-  // mongodb connection properties object
-  db: {
-    // mongodb connection url
-    connectionUrl: 'your connection string',
-    // optional database name, in case using it in connection string is not an option
-    name: 'your database name',
-    // optional mongodb Client options
+    name: 'my-db',
+    // optional mongodb MongoClientOptions
     options: {
       useNewUrlParser: true,
       useUnifiedTopology: true
@@ -88,95 +47,91 @@ var migrator = new Migration({
   }
 })
 
-await migrator.config() // Returns a promise
-```
-
-To write a simple migration, somewhere in the server section of your project define:
-
-```javascript
 migrator.add({
-  version: '0.0.1',
-  up: function(db, client) {
-    // use `db`(mongo driver Db instance) for migration setup to version 0.0.1
-    // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
-  },
-  down: function(db, client) {
-    //
-  }
-})
-```
-
-To run this migration to the latest version:
-
-```javascript
-migrator.up('latest')
-```
-
-### Advanced
-
-A more complete set of migrations might look like:
-
-```javascript
-migrator.add({
-  version: '1.1.1',
+  version: '1.0.1',
   name: 'Name for this migration',
-  up: (db, client) => {
-    // use `db`(mongo driver Db instance) for migration setup to version 1.1.1
-    // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
+  up: async (db: Db, client: MongoClient, logger: Logger) => {
+    // write your migration here
   },
-  down: (db, client) => {
-    // use `db`(mongo driver Db instance) for migration setup to previous version
-    // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
+  down: async (db: Db, client: MongoClient, logger: Logger) => {
+    // write your reverting migration here
   }
 })
 
-migrator.add({
-  version: '1.1.2',
-  name: 'Name for this migration',
-  up: (db, client) => {
-    // use `db`(mongo driver Db instance) for migration setup to version 1.1.2
-    // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
-  },
-  down: (db, client) => {
-    // use `db`(mongo driver Db instance) for migration setup to previous version
-    // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
-  }
-})
+// run all configured migrations greater than the current version in order
+await migrator.up()
 ```
 
-Control execution flow with async/await (promises):
+## Versioning
+
+Migration versions are strings specified using semver _major.minor.patch_ syntax (e.g. '1.2.3') and follow the precedence rules concerning order. They must be exact versions as ranges are not allowed. See [semver](https://www.npmjs.com/package/semver) for more information.
+
+Migration version 0.0.0 is reserved by `migrator` for initial state to indicate no migrations have been applied.
+
+## Flow
+
+Migration state is implemented in the MongoDB collection `migrations`. It contains a single document used for locking migration control. Only one set of migrations is allowed to execute at a time.
+
+> _You can override the collection name in `config` if needed._
+
+```js
+{
+  _id: string, // 'control'
+  version: string,
+  locked: boolean,
+  lockedAt: date
+}
+```
+
+When a migration is performed, all migrations that include versions between `current` and `target` are executed serially in order.
+
+For example, if you have added the following migrations:
+
+- 1.0.0
+- 1.0.1
+- 1.0.2
+- 1.1.0
+
+and the `current` version is at 1.0.0, executing `up('1.1.0')` will run migration 1.0.1, 1.0.2 and 1.1.0. If all migrations were successful, the `current` version becomes 1.1.0.
+
+If any particular migration rejects or throws an error, subsequent migrations are halted and the `current` version is set to the last successfully completed migration.
+
+## API
+
+### `config(opts: IMigrationOptions) ⇒ Promise<void>`
+
+User the `migrator` to configure and setup your migrations:
+
+### `add(migration: IMigration)`
+
+To setup a new database migration script, call `migrator.add`.
+
+You must implement `up` and `down` functions. Return a promise (or use async/await) and
+resolve to indicate success, throw an error or reject to abort.
+
+### `up(target?: string) ⇒ Promise<void>`
+
+To migrate to the latest configured migration:
+
+```js
+migrator.up()
+```
+
+Or by specifying a target version, you can migrate directly to that version (if possible).
+
+```js
+migrator.up('1.0.1')
+```
+
+### `down(target: string) ⇒ Promise<void>`
+
+To revert a migration:
 
 ```javascript
-migrator.add({
-  version: '1.1.2',
-  name: 'Name for this migration',
-  up: async (db, client) => {
-    // use `db`(mongo driver Db instance) for migration setup to version 1.1.2
-    // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
-     await db.collections('someCollection')....
-  },
-  down: async (db, client) => {
-    // use `db`(mongo driver Db instance) for migration setup to previous version
-    // See http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html for db api
-    await db.collections('someCollection')....
-  }
-});
+migrator.down('1.0.1')
 ```
 
-As in 'Basics', you can migrate to the latest by running:
-
-```javascript
-migrator.up('latest')
-```
-
-By specifying a version, you can migrate directly to that version (if possible).
-In the above example, you could migrate directly to version 1.1.2 by running:
-
-```javascript
-migrator.up('1.1.2')
-```
-
-If you wanted to undo all of your migrations, you could migrate back down to version 0.0.0 by running:
+If you want to undo all of your migrations, you can migrate back down to version 0.0.0 by running:
 
 ```javascript
 migrator.down('0.0.0')
@@ -184,17 +139,23 @@ migrator.down('0.0.0')
 
 Sometimes (usually when something goes awry), you may need to retry a migration. You can do this by updating the `migrations.version` field in mongodb to the previous version and re-executing your migration.
 
+### `getVersion() ⇒ string`
+
 To see what version the database is at, call:
 
 ```javascript
 migrator.getVersion()
 ```
 
-To see the configured migrations (excludes 0.0.0), call:
+### `getMigrations() ⇒ IMigration[]`
+
+To see the configured migrations (excluding 0.0.0), call:
 
 ```javascript
 migrator.getMigrations()
 ```
+
+### `close(force?: boolean) ⇒ Promise<void>`
 
 To close the mongodb connection, call:
 
@@ -215,7 +176,8 @@ Note: this requires
 Example:
 
 ```javascript
-module.exports = {
+const albumMigration = {
+  version: '1.0.0',
   async up(db, client) {
     const session = client.startSession()
     try {
@@ -229,7 +191,6 @@ module.exports = {
       await session.endSession()
     }
   },
-
   async down(db, client) {
     const session = client.startSession()
     try {
@@ -245,12 +206,6 @@ module.exports = {
   }
 }
 ```
-
-**IMPORTANT**:
-
-- You cannot create your own migration at version 0.0.0. This version is reserved by `migrator` for initial state when no migrations have been applied.
-- If migrating from vTa to vTz and migration fails from a vTx to vTy, where vTx & vTy are incremental versions between vTa to vTz, migration will stop at vTx.
-- Prefer an async function (async | promise) for both up()/down() setup. This will ensure migration completes before version bump during execution.
 
 ### Configuration
 
