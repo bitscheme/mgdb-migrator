@@ -15,7 +15,7 @@ describe('Migration', () => {
         collectionName: '_migration',
         db: {
           connectionUrl: process.env.DB_URL,
-          options: { useUnifiedTopology: true },
+          options: { useUnifiedTopology: true, useNewUrlParser: true },
         },
       });
     } catch (e) {

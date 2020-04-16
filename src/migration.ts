@@ -1,9 +1,13 @@
 import { last } from 'lodash';
 import { Collection, Db, MongoClient, MongoClientOptions } from 'mongodb';
+import ow from 'ow';
 import pTimeout, { TimeoutError } from 'p-timeout';
 import * as semver from 'semver';
 
-const E_CONFIG_NO_DB = 'Migration is not configured.  Ensure Migration.config() has been called';
+enum MigrationDirection {
+  up = 'up',
+  down = 'down',
+}
 
 export interface IDbProperties {
   connectionUrl: string;
@@ -34,6 +38,27 @@ export interface IMigration {
   ) => Promise<any> | any;
 }
 
+function validSemver(version: string) {
+  ow(version, ow.string.nonEmpty);
+  ow(
+    version,
+    ow.string.validate((value) => ({
+      validator: Boolean(semver.valid(value)),
+      message: 'invalid semver',
+    })),
+  );
+}
+
+function nonZeroSemver(version: string) {
+  ow(
+    version,
+    ow.string.validate((value) => ({
+      validator: semver.gt(value, '0.0.0'),
+      message: 'version must be greater than 0.0.0',
+    })),
+  );
+}
+
 export class Migration {
   private initialMigration: IMigration = {
     version: '0.0.0',
@@ -58,7 +83,7 @@ export class Migration {
     this.migrations = [this.initialMigration];
     this.options = {
       log: true,
-      logger: null,
+      logger: (level, ...args) => console[level](...args),
       collectionName: 'migrations',
       db: null,
       timeout: Number.POSITIVE_INFINITY,
@@ -71,13 +96,11 @@ export class Migration {
   public async config(opts: IMigrationOptions): Promise<void> {
     this.options = Object.assign({}, this.options, opts);
 
-    const clientOptions = { ...this.options.db.options };
+    ow(this.options.logger, ow.function);
+    ow(this.options.db.connectionUrl, ow.string.nonEmpty);
+    ow(this.options.collectionName, ow.string.nonEmpty);
 
-    if (clientOptions.useNewUrlParser !== false) {
-      clientOptions.useNewUrlParser = true;
-    }
-
-    this.client = await MongoClient.connect(this.options.db.connectionUrl, clientOptions);
+    this.client = await MongoClient.connect(this.options.db.connectionUrl, this.options.db.options);
     this.db = this.client.db(this.options.db.name || undefined);
     this.collection = this.db.collection(this.options.collectionName);
   }
@@ -86,21 +109,10 @@ export class Migration {
    * Add a new migration
    */
   public add(migration: IMigration): void {
-    if (typeof migration.up !== 'function') {
-      throw new Error('migration must supply an up function');
-    }
-
-    if (typeof migration.down !== 'function') {
-      throw new Error('migration must supply a down function');
-    }
-
-    if (typeof migration.version !== 'string' || !semver.valid(migration.version)) {
-      throw new Error('migration must supply a SemVer version string');
-    }
-
-    if (semver.lte(migration.version, '0.0.0')) {
-      throw new Error('migration version must be greater than 0.0.0');
-    }
+    ow(migration.up, ow.function);
+    ow(migration.down, ow.function);
+    validSemver(migration.version);
+    nonZeroSemver(migration.version);
 
     // Freeze the migration object to make it hereafter immutable
     Object.freeze(migration);
@@ -114,9 +126,11 @@ export class Migration {
    * @example down('1.2.3') - migrate down to version '1.2.3'
    */
   public async down(version: string): Promise<void> {
+    validSemver(version);
+
     try {
       await this.lock();
-      await this.execute('down', version);
+      await this.execute(MigrationDirection.down, version);
     } catch (e) {
       this.logger('error', `migration failed:`, e.message);
 
@@ -134,9 +148,11 @@ export class Migration {
   public async up(version?: string): Promise<void> {
     const targetVersion = version || last(this.migrations).version;
 
+    validSemver(targetVersion);
+
     try {
       await this.lock();
-      await this.execute('up', targetVersion);
+      await this.execute(MigrationDirection.up, targetVersion);
     } catch (e) {
       this.logger('error', `migration failed:`, e.message);
 
@@ -159,7 +175,7 @@ export class Migration {
    * Returns the migrations
    */
   public getMigrations(): IMigration[] {
-    // Exclude default/base migration v0 since its not a configured migration
+    // Exclude default base migration v0 since its not a configured migration
     return this.migrations.slice(1);
   }
 
@@ -186,17 +202,15 @@ export class Migration {
    * Logger
    */
   private logger(level: string, ...args: any[]): void {
-    if (this.options.log === false) {
-      return;
+    if (this.options.log) {
+      this.options.logger(level, ...args);
     }
-
-    this.options.logger ? this.options.logger(level, ...args) : console[level](...args);
   }
 
   /**
    * Invoke the migration
    */
-  private async migrate(direction, idx: number) {
+  private async migrate(direction: MigrationDirection, idx: number) {
     const migration = this.migrations[idx];
 
     this.logger(
@@ -259,13 +273,9 @@ export class Migration {
   /**
    * Executes migration of the specific version
    */
-  private async execute(direction: 'up' | 'down', targetVersion: string): Promise<void> {
-    if (!semver.valid(targetVersion)) {
-      throw new Error(`invalid semver: ${targetVersion}`);
-    }
-
-    if (!this.db) {
-      throw new Error(E_CONFIG_NO_DB);
+  private async execute(direction: MigrationDirection, targetVersion: string): Promise<void> {
+    if (!this.client) {
+      throw new Error('migrator has not been configured');
     }
 
     if (this.migrations.length <= 1) {
@@ -278,16 +288,16 @@ export class Migration {
     let currentVersion = control.version;
 
     if (semver.eq(currentVersion, targetVersion)) {
-      this.logger('warn', 'migration already at version ' + targetVersion);
+      this.logger('warn', 'skipping...current version already at ' + targetVersion);
       return;
     }
 
     const startIdx = this.findIndexByVersion(currentVersion);
     const endIdx = this.findIndexByVersion(targetVersion);
 
-    this.logger('info', `${direction} migration started from ${currentVersion} to ${targetVersion}`);
+    this.logger('info', `starting migration from ${currentVersion} to ${targetVersion}`);
 
-    if (direction === 'up') {
+    if (direction === MigrationDirection.up) {
       if (semver.gt(currentVersion, targetVersion)) {
         throw new Error(`current version ${currentVersion} > target version ${targetVersion}`);
       }
@@ -304,7 +314,7 @@ export class Migration {
           throw new Error(`migration from ${previousVersion} to ${destVersion}: ${e.message}`);
         }
       }
-    } else if (direction === 'down') {
+    } else if (direction === MigrationDirection.down) {
       if (semver.lt(currentVersion, targetVersion)) {
         throw new Error(`current version ${currentVersion} < target version ${targetVersion}`);
       }
