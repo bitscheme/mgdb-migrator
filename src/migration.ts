@@ -2,7 +2,6 @@ import { last } from 'lodash';
 import { Collection, Db, MongoClient, MongoClientOptions } from 'mongodb';
 import ow from 'ow';
 import pTimeout, { TimeoutError } from 'p-timeout';
-import * as semver from 'semver';
 
 enum MigrationDirection {
   up = 'up',
@@ -26,36 +25,15 @@ export interface IMigrationOptions {
 }
 
 export interface IMigration {
-  version: string;
+  version: number;
   name: string;
   up: (db?: Db, client?: MongoClient, logger?: Logger) => Promise<any> | any;
   down: (db?: Db, client?: MongoClient, logger?: Logger) => Promise<any> | any;
 }
 
-function validSemver(version: string) {
-  ow(version, ow.string.nonEmpty);
-  ow(
-    version,
-    ow.string.validate((value) => ({
-      validator: Boolean(semver.valid(value)),
-      message: 'invalid semver',
-    })),
-  );
-}
-
-function nonZeroSemver(version: string) {
-  ow(
-    version,
-    ow.string.validate((value) => ({
-      validator: semver.gt(value, '0.0.0'),
-      message: 'version must be greater than 0.0.0',
-    })),
-  );
-}
-
 export class Migration {
   private initialMigration: IMigration = {
-    version: '0.0.0',
+    version: 0,
     name: 'v0',
     up: async () => {
       //
@@ -105,23 +83,21 @@ export class Migration {
   public add(migration: IMigration): void {
     ow(migration.up, ow.function);
     ow(migration.down, ow.function);
-    validSemver(migration.version);
-    nonZeroSemver(migration.version);
+    ow(migration.version, ow.number.greaterThan(0));
+    ow(migration.name, ow.string);
 
     // Freeze the migration object to make it hereafter immutable
     Object.freeze(migration);
 
     this.migrations.push(migration);
-    this.migrations.sort((a: IMigration, b: IMigration) => semver.compare(a.version, b.version));
+    this.migrations.sort((a: IMigration, b: IMigration) => a.version - b.version);
   }
 
   /**
    * Perform migrations down to a specific version
-   * @example down('1.2.3') - migrate down to version '1.2.3'
+   * @example down(1) - migrate down to version 1
    */
-  public async down(version: string): Promise<void> {
-    validSemver(version);
-
+  public async down(version: number): Promise<void> {
     try {
       await this.lock();
       await this.execute(MigrationDirection.down, version);
@@ -137,12 +113,12 @@ export class Migration {
   /**
    * Perform migrations up to the latest or specific configured version
    * @example up() - migrate up to latest version
-   * @example up('1.2.3') - migrate up to version '1.2.3'
+   * @example up(2) - migrate up to version 2
    */
-  public async up(version?: string): Promise<void> {
+  public async up(version?: number): Promise<void> {
     const targetVersion = version || last(this.migrations).version;
 
-    validSemver(targetVersion);
+    ow(targetVersion, ow.number.greaterThan(0));
 
     try {
       await this.lock();
@@ -176,7 +152,7 @@ export class Migration {
   /**
    * Returns the current version
    */
-  public async getVersion(): Promise<string> {
+  public async getVersion(): Promise<number> {
     const control = await this.getControl();
 
     return control.version;
@@ -257,7 +233,7 @@ export class Migration {
   }
 
   // Side effect: saves version.
-  private updateVersion(version: string) {
+  private updateVersion(version: number) {
     return this.setControl({
       locked: true,
       version,
@@ -267,7 +243,7 @@ export class Migration {
   /**
    * Executes migration of the specific version
    */
-  private async execute(direction: MigrationDirection, targetVersion: string): Promise<void> {
+  private async execute(direction: MigrationDirection, targetVersion: number): Promise<void> {
     if (!this.client) {
       throw new Error('migrator has not been configured');
     }
@@ -281,7 +257,7 @@ export class Migration {
     const control = await this.getControl();
     let currentVersion = control.version;
 
-    if (semver.eq(currentVersion, targetVersion)) {
+    if (currentVersion === targetVersion) {
       this.logger('warn', 'skipping migration...current version already at ' + targetVersion);
       return;
     }
@@ -292,7 +268,7 @@ export class Migration {
     this.logger('info', `starting migration from ${currentVersion} to ${targetVersion}`);
 
     if (direction === MigrationDirection.up) {
-      if (semver.gt(currentVersion, targetVersion)) {
+      if (currentVersion > targetVersion) {
         throw new Error(`current version ${currentVersion} > target version ${targetVersion}`);
       }
 
@@ -309,7 +285,7 @@ export class Migration {
         }
       }
     } else if (direction === MigrationDirection.down) {
-      if (semver.lt(currentVersion, targetVersion)) {
+      if (currentVersion < targetVersion) {
         throw new Error(`current version ${currentVersion} < target version ${targetVersion}`);
       }
 
@@ -331,13 +307,13 @@ export class Migration {
   /**
    * Gets the current control record, optionally creating it if non-existent
    */
-  private async getControl(): Promise<{ version: string; locked: boolean }> {
+  private async getControl(): Promise<{ version: number; locked: boolean }> {
     const con = await this.collection.findOne({ _id: 'control' });
 
     return (
       con ||
       (await this.setControl({
-        version: '0.0.0',
+        version: 0,
         locked: false,
       }))
     );
@@ -347,9 +323,9 @@ export class Migration {
    * Set the control record
    */
   private async setControl(control: {
-    version: string
+    version: number
     locked: boolean,
-  }): Promise<{ version: string; locked: boolean } | null> {
+  }): Promise<{ version: number; locked: boolean } | null> {
     const updateResult = await this.collection.updateOne(
       {
         _id: 'control',
@@ -375,7 +351,7 @@ export class Migration {
   /**
    * Returns the migration index or throws if not found
    */
-  private findIndexByVersion(version: string): number {
+  private findIndexByVersion(version: number): number {
     for (let i = 0; i < this.migrations.length; i++) {
       if (this.migrations[i].version === version) {
         return i;

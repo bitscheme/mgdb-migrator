@@ -1,12 +1,12 @@
 import { Db, MongoClient } from 'mongodb';
 import { migrator } from '../src/';
 
-const v0 = '0.0.0';
-const v1 = '0.0.1';
-const v2 = '0.1.2';
-const v3 = '0.10.3';
-const v4 = '1.0.4';
-const v5 = '100.0.5';
+const v0 = 0;
+const v1 = 1;
+const v2 = 2;
+const v3 = 3;
+const v4 = 4;
+const v5 = 5;
 
 describe('Migration', () => {
   beforeAll(async () => {
@@ -225,7 +225,7 @@ describe('Migration', () => {
       test('from v0 to v100, should stop due to v100 does not exist', async () => {
         let currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v0);
-        await expect(migrator.up('100.100.100')).rejects.toThrow();
+        await expect(migrator.up(100)).rejects.toThrow();
         currentVersion = await migrator.getVersion();
         expect(currentVersion).toBe(v0);
       });
