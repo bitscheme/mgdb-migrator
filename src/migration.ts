@@ -9,6 +9,8 @@ enum MigrationDirection {
   down = 'down',
 }
 
+type Logger = (level: string, ...args: any[]) => void;
+
 export interface IDbProperties {
   connectionUrl: string;
   name?: string;
@@ -17,7 +19,7 @@ export interface IDbProperties {
 
 export interface IMigrationOptions {
   log?: boolean;
-  logger?: (level: string, ...args: any[]) => void;
+  logger?: Logger;
   collectionName?: string;
   db: IDbProperties;
   timeout?: number;
@@ -26,16 +28,8 @@ export interface IMigrationOptions {
 export interface IMigration {
   version: string;
   name: string;
-  up: (
-    db?: Db,
-    client?: MongoClient,
-    logger?: (level: string, ...args: any[]) => void,
-  ) => Promise<any> | any;
-  down: (
-    db?: Db,
-    client?: MongoClient,
-    logger?: (level: string, ...args: any[]) => void,
-  ) => Promise<any> | any;
+  up: (db?: Db, client?: MongoClient, logger?: Logger) => Promise<any> | any;
+  down: (db?: Db, client?: MongoClient, logger?: Logger) => Promise<any> | any;
 }
 
 function validSemver(version: string) {
@@ -83,7 +77,7 @@ export class Migration {
     this.migrations = [this.initialMigration];
     this.options = {
       log: true,
-      logger: (level, ...args) => console[level](...args),
+      logger: (level: string, ...args: any[]) => console[level](...args),
       collectionName: 'migrations',
       db: null,
       timeout: Number.POSITIVE_INFINITY,
@@ -220,8 +214,7 @@ export class Migration {
     );
 
     // Wrap in a promise in case migration is not promise-able
-    const self = this;
-    const p = Promise.resolve(migration[direction](this.db, this.client, self.logger));
+    const p = Promise.resolve(migration[direction](this.db, this.client, this.logger.bind(this)));
 
     await pTimeout(p, this.options.timeout);
   }
