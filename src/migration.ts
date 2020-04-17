@@ -220,7 +220,8 @@ export class Migration {
     );
 
     // Wrap in a promise in case migration is not promise-able
-    const p = Promise.resolve(migration[direction](this.db, this.client, this.logger));
+    const self = this;
+    const p = Promise.resolve(migration[direction](this.db, this.client, self.logger));
 
     await pTimeout(p, this.options.timeout);
   }
@@ -288,7 +289,7 @@ export class Migration {
     let currentVersion = control.version;
 
     if (semver.eq(currentVersion, targetVersion)) {
-      this.logger('warn', 'skipping...current version already at ' + targetVersion);
+      this.logger('warn', 'skipping migration...current version already at ' + targetVersion);
       return;
     }
 
