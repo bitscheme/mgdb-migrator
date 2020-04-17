@@ -1,5 +1,5 @@
 import { last } from 'lodash';
-import { Collection, Db, MongoClient, MongoClientOptions } from 'mongodb';
+import { Collection, MongoClient, MongoClientOptions } from 'mongodb';
 import ow from 'ow';
 import pTimeout, { TimeoutError } from 'p-timeout';
 
@@ -27,8 +27,8 @@ export interface IMigrationOptions {
 export interface IMigration {
   version: number;
   name: string;
-  up: (db?: Db, client?: MongoClient, logger?: Logger) => Promise<any> | any;
-  down: (db?: Db, client?: MongoClient, logger?: Logger) => Promise<any> | any;
+  up: (client?: MongoClient, logger?: Logger) => Promise<any> | any;
+  down: (client?: MongoClient, logger?: Logger) => Promise<any> | any;
 }
 
 export class Migration {
@@ -44,7 +44,6 @@ export class Migration {
   };
   private migrations: IMigration[];
   private collection: Collection;
-  private db: Db;
   private client: MongoClient;
   private options: IMigrationOptions;
 
@@ -73,8 +72,9 @@ export class Migration {
     ow(this.options.collectionName, ow.string.nonEmpty);
 
     this.client = await MongoClient.connect(this.options.db.connectionUrl, this.options.db.options);
-    this.db = this.client.db(this.options.db.name || undefined);
-    this.collection = this.db.collection(this.options.collectionName);
+
+    const db = this.client.db(this.options.db.name || undefined);
+    this.collection = db.collection(this.options.collectionName);
   }
 
   /**
@@ -190,7 +190,7 @@ export class Migration {
     );
 
     // Wrap in a promise in case migration is not promise-able
-    const p = Promise.resolve(migration[direction](this.db, this.client, this.logger.bind(this)));
+    const p = Promise.resolve(migration[direction](this.client, this.logger.bind(this)));
 
     await pTimeout(p, this.options.timeout);
   }

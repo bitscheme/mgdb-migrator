@@ -1,4 +1,4 @@
-import { Db, MongoClient } from 'mongodb';
+import { MongoClient } from 'mongodb';
 import { migrator } from '../src/';
 
 const v0 = 0;
@@ -29,14 +29,12 @@ describe('Migration', () => {
     migrator.add({
       version: v1,
       name: 'v1',
-      up: async (db, client, logger) => {
-        expect(db).toBeInstanceOf(Db);
+      up: async (client, logger) => {
         expect(client).toBeInstanceOf(MongoClient);
         expect(typeof logger).toBe('function');
         logger('info', 'up');
       },
-      down: (db, client, logger) => {
-        expect(db).toBeInstanceOf(Db);
+      down: (client, logger) => {
         expect(client).toBeInstanceOf(MongoClient);
         expect(typeof logger).toBe('function');
         logger('info', 'down');

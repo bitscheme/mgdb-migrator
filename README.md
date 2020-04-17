@@ -48,13 +48,21 @@ await migrator.config({
 })
 
 migrator.add({
-  version: '1.0.1',
+  version: 1,
   name: 'Name for this migration',
-  up: async (db: Db, client: MongoClient, logger: Logger) => {
+  up: async (client: MongoClient, logger: Logger) => {
     // write your migration here
+    await client
+      .db()
+      .collection('albums')
+      .updateMany({}, { $set: { stars: 5 } })
   },
-  down: async (db: Db, client: MongoClient, logger: Logger) => {
+  down: async (client: MongoClient, logger: Logger) => {
     // write your reverting migration here
+    await client
+      .db()
+      .collection('albums')
+      .updateMany({}, { $set: { stars: 50 } })
   }
 })
 
@@ -64,9 +72,7 @@ await migrator.up()
 
 ## Versioning
 
-Migration versions are strings specified using semver _major.minor.patch_ syntax (e.g. '1.2.3') and follow the precedence rules concerning order. They must be exact versions as ranges are not allowed. See [semver](https://www.npmjs.com/package/semver) for more information.
-
-Migration version 0.0.0 is reserved by `migrator` for initial state to indicate no migrations have been applied.
+Migration versions use sequential integers. Version 0 is reserved by `migrator` for initial state to indicate no migrations have been applied.
 
 ## Flow
 
@@ -76,10 +82,10 @@ Migration state is implemented in the MongoDB collection `migrations`. It contai
 
 ```js
 {
-  _id: string, // 'control'
-  version: string,
-  locked: boolean,
-  lockedAt: date
+  _id: String, // 'control'
+  version: Int32,
+  locked: Bool,
+  lockedAt: Date
 }
 ```
 
@@ -87,12 +93,12 @@ When a migration is performed, all migrations that include versions between `cur
 
 For example, if you have added the following migrations:
 
-- 1.0.0
-- 1.0.1
-- 1.0.2
-- 1.1.0
+- v1
+- v2
+- v3
+- v4
 
-and the `current` version is at 1.0.0, executing `up('1.1.0')` will run migration 1.0.1, 1.0.2 and 1.1.0. If all migrations were successful, the `current` version becomes 1.1.0.
+and the `current` version is at v0, executing `up(3)` will run migrations v1, v2 and v3. If all migrations were successful, the `current` version becomes v3.
 
 If any particular migration rejects or throws an error, subsequent migrations are halted and the `current` version is set to the last successfully completed migration.
 
@@ -109,7 +115,7 @@ To setup a new database migration script, call `migrator.add`.
 You must implement `up` and `down` functions. Return a promise (or use async/await) and
 resolve to indicate success, throw an error or reject to abort.
 
-### `up(target?: string) ⇒ Promise<void>`
+### `up(target?: number) ⇒ Promise<void>`
 
 To migrate to the latest configured migration:
 
@@ -120,26 +126,26 @@ migrator.up()
 Or by specifying a target version, you can migrate directly to that version (if possible).
 
 ```js
-migrator.up('1.0.1')
+migrator.up(1)
 ```
 
-### `down(target: string) ⇒ Promise<void>`
+### `down(target: number) ⇒ Promise<void>`
 
 To revert a migration:
 
 ```javascript
-migrator.down('1.0.1')
+migrator.down(1)
 ```
 
-If you want to undo all of your migrations, you can migrate back down to version 0.0.0 by running:
+If you want to undo all of your migrations, you can migrate back down to version 0 by running:
 
 ```javascript
-migrator.down('0.0.0')
+migrator.down(0)
 ```
 
 Sometimes (usually when something goes awry), you may need to retry a migration. You can do this by updating the `migrations.version` field in mongodb to the previous version and re-executing your migration.
 
-### `getVersion() ⇒ string`
+### `getVersion() ⇒ number`
 
 To see what version the database is at, call:
 
@@ -149,7 +155,7 @@ migrator.getVersion()
 
 ### `getMigrations() ⇒ IMigration[]`
 
-To see the configured migrations (excluding 0.0.0), call:
+To see the configured migrations (excluding v0), call:
 
 ```javascript
 migrator.getMigrations()
@@ -177,8 +183,8 @@ Example:
 
 ```javascript
 const albumMigration = {
-  version: '1.0.0',
-  async up(db, client) {
+  version: 1,
+  async up(client) {
     const session = client.startSession()
     try {
       await session.withTransaction(async () => {
@@ -191,7 +197,7 @@ const albumMigration = {
       await session.endSession()
     }
   },
-  async down(db, client) {
+  async down(client) {
     const session = client.startSession()
     try {
       await session.withTransaction(async () => {
@@ -213,6 +219,8 @@ Migrations uses the console by default for logging if not provided. If you want 
 configuring the `logger` option when calling `migrator.config`.
 
 Log levels conform to those in node.js [Console](https://nodejs.org/api/console.html) API.
+
+#### Winston example
 
 ```javascript
 import { createLogger } from 'winston';
