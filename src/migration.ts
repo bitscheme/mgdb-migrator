@@ -8,7 +8,7 @@ enum MigrationDirection {
   down = 'down',
 }
 
-type Logger = (level: string, ...args: any[]) => void;
+export type Logger = (level: string, ...args: any[]) => void;
 
 export interface IDbProperties {
   connectionUrl: string;

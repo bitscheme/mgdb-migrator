@@ -2,10 +2,10 @@ A simple migration system for mongodb supporting up/downwards migrations.
 
 ## Status
 
-| Branch |                                                   Status                                                   |
-| ------ | :--------------------------------------------------------------------------------------------------------: |
-| Next   |  ![CI Workflow](https://github.com/bitscheme/mgdb-migrator/workflows/CI%20Workflow/badge.svg?branch=next)  |
-| Master | ![CI Workflow](https://github.com/bitscheme/mgdb-migrator/workflows/CI%20Workflow/badge.svg?branch=master) |
+| Branch |                                                    Status                                                     |
+| ------ | :-----------------------------------------------------------------------------------------------------------: |
+| Next   |  ![CI Workflow](https://github.com/emmanuelbuah/mgdb-migrator/workflows/CI%20Workflow/badge.svg?branch=next)  |
+| Master | ![CI Workflow](https://github.com/emmanuelbuah/mgdb-migrator/workflows/CI%20Workflow/badge.svg?branch=master) |
 
 ## Install
 
@@ -62,7 +62,7 @@ migrator.add({
     await client
       .db()
       .collection('albums')
-      .updateMany({}, { $set: { stars: 50 } })
+      .updateMany({}, { $set: { stars: 0 } })
   }
 })
 
