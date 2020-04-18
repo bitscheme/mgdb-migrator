@@ -265,7 +265,7 @@ export class Migration {
     const startIdx = this.findIndexByVersion(currentVersion);
     const endIdx = this.findIndexByVersion(targetVersion);
 
-    this.logger('info', `starting migration from ${currentVersion} to ${targetVersion}`);
+    this.logger('info', `starting migration from version ${currentVersion} to ${targetVersion}`);
 
     if (direction === MigrationDirection.up) {
       if (currentVersion > targetVersion) {
