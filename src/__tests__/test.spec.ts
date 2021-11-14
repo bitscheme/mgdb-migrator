@@ -12,18 +12,14 @@ describe('Migration', () => {
   const migrator = new Migration()
 
   beforeAll(async () => {
-    try {
-      await migrator.config({
-        log: true,
-        logger: (level: string, ...args: any[]) => console[level]('jest', ...args),
-        collectionName: '_migration',
-        db: {
-          connectionUrl: process.env.DB_URL,
-        },
-      })
-    } catch (e) {
-      throw e
-    }
+    await migrator.config({
+      log: true,
+      logger: (level: string, ...args: any[]) => console[level]('jest', ...args),
+      collectionName: '_migration',
+      db: {
+        connectionUrl: process.env.DB_URL,
+      },
+    })
   })
 
   beforeEach(() => {

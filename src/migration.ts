@@ -134,7 +134,7 @@ export class Migration {
   /**
    * Closes the connection
    */
-  public async close(force: boolean = false): Promise<void> {
+  public async close(force = false): Promise<void> {
     if (this.client) {
       await this.client.close(force)
     }
