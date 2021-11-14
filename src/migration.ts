@@ -1,34 +1,33 @@
-import { last } from 'lodash';
-import { Collection, MongoClient, MongoClientOptions } from 'mongodb';
-import ow from 'ow';
-import pTimeout, { TimeoutError } from 'p-timeout';
+import { last } from 'lodash'
+import { Collection, MongoClient, MongoClientOptions } from 'mongodb'
+import ow from 'ow'
 
 enum MigrationDirection {
   up = 'up',
   down = 'down',
 }
 
-export type Logger = (level: string, ...args: any[]) => void;
+export type Logger = (level: string, ...args: any[]) => void
 
 export interface IDbProperties {
-  connectionUrl: string;
-  name?: string;
-  options?: MongoClientOptions;
+  connectionUrl: string
+  name?: string
+  options?: MongoClientOptions
 }
 
 export interface IMigrationOptions {
-  log?: boolean;
-  logger?: Logger;
-  collectionName?: string;
-  db: IDbProperties;
-  timeout?: number;
+  log?: boolean
+  logger?: Logger
+  collectionName?: string
+  db: IDbProperties
+  timeout?: number
 }
 
 export interface IMigration {
-  version: number;
-  name: string;
-  up: (client?: MongoClient, logger?: Logger) => Promise<any> | any;
-  down: (client?: MongoClient, logger?: Logger) => Promise<any> | any;
+  version: number
+  name: string
+  up: (client?: MongoClient, logger?: Logger) => Promise<any> | any
+  down: (client?: MongoClient, logger?: Logger) => Promise<any> | any
 }
 
 export class Migration {
@@ -41,56 +40,56 @@ export class Migration {
     down: async () => {
       //
     },
-  };
-  private migrations: IMigration[];
-  private collection: Collection;
-  private client: MongoClient;
-  private options: IMigrationOptions;
+  }
+  private migrations: IMigration[]
+  private collection: Collection
+  private client: MongoClient
+  private options: IMigrationOptions
 
   /**
    * Creates an instance of Migration
    */
   constructor() {
-    this.migrations = [this.initialMigration];
+    this.migrations = [this.initialMigration]
     this.options = {
       log: true,
       logger: (level: string, ...args: any[]) => console[level](...args),
       collectionName: 'migrations',
       db: null,
       timeout: Number.POSITIVE_INFINITY,
-    };
+    }
   }
 
   /**
    * Configure migration
    */
   public async config(opts: IMigrationOptions): Promise<void> {
-    this.options = Object.assign({}, this.options, opts);
+    this.options = Object.assign({}, this.options, opts)
 
-    ow(this.options.logger, ow.function);
-    ow(this.options.db.connectionUrl, ow.string.nonEmpty);
-    ow(this.options.collectionName, ow.string.nonEmpty);
+    ow(this.options.logger, ow.function)
+    ow(this.options.db.connectionUrl, ow.string.nonEmpty)
+    ow(this.options.collectionName, ow.string.nonEmpty)
 
-    this.client = await MongoClient.connect(this.options.db.connectionUrl, this.options.db.options);
+    this.client = await MongoClient.connect(this.options.db.connectionUrl, this.options.db.options)
 
-    const db = this.client.db(this.options.db.name || undefined);
-    this.collection = db.collection(this.options.collectionName);
+    const db = this.client.db(this.options.db.name || undefined)
+    this.collection = db.collection(this.options.collectionName)
   }
 
   /**
    * Add a new migration
    */
   public add(migration: IMigration): void {
-    ow(migration.up, ow.function);
-    ow(migration.down, ow.function);
-    ow(migration.version, ow.number.greaterThan(0));
-    ow(migration.name, ow.string);
+    ow(migration.up, ow.function)
+    ow(migration.down, ow.function)
+    ow(migration.version, ow.number.greaterThan(0))
+    ow(migration.name, ow.string)
 
     // Freeze the migration object to make it hereafter immutable
-    Object.freeze(migration);
+    Object.freeze(migration)
 
-    this.migrations.push(migration);
-    this.migrations.sort((a: IMigration, b: IMigration) => a.version - b.version);
+    this.migrations.push(migration)
+    this.migrations.sort((a: IMigration, b: IMigration) => a.version - b.version)
   }
 
   /**
@@ -99,14 +98,14 @@ export class Migration {
    */
   public async down(version: number): Promise<void> {
     try {
-      await this.lock();
-      await this.execute(MigrationDirection.down, version);
+      await this.lock()
+      await this.execute(MigrationDirection.down, version)
     } catch (e) {
-      this.logger('error', `migration failed:`, e.message);
+      this.logger('error', `migration failed:`, e.message)
 
-      throw e;
+      throw e
     } finally {
-      await this.unlock();
+      await this.unlock()
     }
   }
 
@@ -116,19 +115,19 @@ export class Migration {
    * @example up(2) - migrate up to version 2
    */
   public async up(version?: number): Promise<void> {
-    const targetVersion = version || last(this.migrations).version;
+    const targetVersion = version || last(this.migrations).version
 
-    ow(targetVersion, ow.number.greaterThan(0));
+    ow(targetVersion, ow.number.greaterThan(0))
 
     try {
-      await this.lock();
-      await this.execute(MigrationDirection.up, targetVersion);
+      await this.lock()
+      await this.execute(MigrationDirection.up, targetVersion)
     } catch (e) {
-      this.logger('error', `migration failed:`, e.message);
+      this.logger('error', `migration failed:`, e.message)
 
-      throw e;
+      throw e
     } finally {
-      await this.unlock();
+      await this.unlock()
     }
   }
 
@@ -137,7 +136,7 @@ export class Migration {
    */
   public async close(force: boolean = false): Promise<void> {
     if (this.client) {
-      await this.client.close(force);
+      await this.client.close(force)
     }
   }
 
@@ -146,16 +145,16 @@ export class Migration {
    */
   public getMigrations(): IMigration[] {
     // Exclude default base migration v0 since its not a configured migration
-    return this.migrations.slice(1);
+    return this.migrations.slice(1)
   }
 
   /**
    * Returns the current version
    */
   public async getVersion(): Promise<number> {
-    const control = await this.getControl();
+    const control = await this.getControl()
 
-    return control.version;
+    return control.version
   }
 
   /**
@@ -163,9 +162,9 @@ export class Migration {
    * Intended for dev and test mode only. Use wisely
    */
   public async reset(): Promise<void> {
-    this.migrations = [this.initialMigration];
+    this.migrations = [this.initialMigration]
 
-    await this.collection.deleteMany({});
+    await this.collection.deleteMany({})
   }
 
   /**
@@ -173,7 +172,7 @@ export class Migration {
    */
   private logger(level: string, ...args: any[]): void {
     if (this.options.log) {
-      this.options.logger(level, ...args);
+      this.options.logger(level, ...args)
     }
   }
 
@@ -181,18 +180,18 @@ export class Migration {
    * Invoke the migration
    */
   private async migrate(direction: MigrationDirection, idx: number) {
-    const migration = this.migrations[idx];
+    const migration = this.migrations[idx]
 
     this.logger(
       'info',
       `running migration ${direction}() on version ${migration.version}`,
-      `${migration.name || ''}`,
-    );
+      `${migration.name || ''}`
+    )
 
     // Wrap in a promise in case migration is not promise-able
-    const p = Promise.resolve(migration[direction](this.client, this.logger.bind(this)));
+    const p = Promise.resolve(migration[direction](this.client, this.logger.bind(this)))
 
-    await pTimeout(p, this.options.timeout);
+    await p
   }
 
   /**
@@ -214,10 +213,10 @@ export class Migration {
           locked: true,
           lockedAt: new Date(),
         },
-      },
-    );
+      }
+    )
 
-    return null != updateResult.value && 1 === updateResult.ok;
+    return null != updateResult.value && 1 === updateResult.ok
   }
 
   /**
@@ -228,8 +227,8 @@ export class Migration {
       {
         _id: 'control',
       },
-      { $set: { locked: false } },
-    );
+      { $set: { locked: false } }
+    )
   }
 
   // Side effect: saves version.
@@ -237,7 +236,7 @@ export class Migration {
     return this.setControl({
       locked: true,
       version,
-    });
+    })
   }
 
   /**
@@ -245,60 +244,60 @@ export class Migration {
    */
   private async execute(direction: MigrationDirection, targetVersion: number): Promise<void> {
     if (!this.client) {
-      throw new Error('migrator has not been configured');
+      throw new Error('migrator has not been configured')
     }
 
     if (this.migrations.length <= 1) {
-      this.logger('warn', 'no migrations are pending');
-      return;
+      this.logger('warn', 'no migrations are pending')
+      return
     }
 
     // Side effect: upserts control document.
-    const control = await this.getControl();
-    let currentVersion = control.version;
+    const control = await this.getControl()
+    let currentVersion = control.version
 
     if (currentVersion === targetVersion) {
-      this.logger('warn', 'skipping migration...current version already at ' + targetVersion);
-      return;
+      this.logger('warn', 'skipping migration...current version already at ' + targetVersion)
+      return
     }
 
-    const startIdx = this.findIndexByVersion(currentVersion);
-    const endIdx = this.findIndexByVersion(targetVersion);
+    const startIdx = this.findIndexByVersion(currentVersion)
+    const endIdx = this.findIndexByVersion(targetVersion)
 
-    this.logger('info', `starting migration from version ${currentVersion} to ${targetVersion}`);
+    this.logger('info', `starting migration from version ${currentVersion} to ${targetVersion}`)
 
     if (direction === MigrationDirection.up) {
       if (currentVersion > targetVersion) {
-        throw new Error(`current version ${currentVersion} > target version ${targetVersion}`);
+        throw new Error(`current version ${currentVersion} > target version ${targetVersion}`)
       }
 
       for (let i = startIdx; i < endIdx; i++) {
         try {
-          await this.migrate(direction, i + 1);
-          currentVersion = this.migrations[i + 1].version;
-          this.logger('info', `migration ${currentVersion} completed`);
-          await this.updateVersion(currentVersion);
+          await this.migrate(direction, i + 1)
+          currentVersion = this.migrations[i + 1].version
+          this.logger('info', `migration ${currentVersion} completed`)
+          await this.updateVersion(currentVersion)
         } catch (e) {
-          const previousVersion = this.migrations[i].version;
-          const destVersion = this.migrations[i + 1].version;
-          throw new Error(`migration from ${previousVersion} to ${destVersion}: ${e.message}`);
+          const previousVersion = this.migrations[i].version
+          const destVersion = this.migrations[i + 1].version
+          throw new Error(`migration from ${previousVersion} to ${destVersion}: ${e.message}`)
         }
       }
     } else if (direction === MigrationDirection.down) {
       if (currentVersion < targetVersion) {
-        throw new Error(`current version ${currentVersion} < target version ${targetVersion}`);
+        throw new Error(`current version ${currentVersion} < target version ${targetVersion}`)
       }
 
       for (let i = startIdx; i > endIdx; i--) {
         try {
-          await this.migrate(direction, i);
-          currentVersion = this.migrations[i - 1].version;
-          this.logger('info', `migration ${currentVersion} completed`);
-          await this.updateVersion(currentVersion);
+          await this.migrate(direction, i)
+          currentVersion = this.migrations[i - 1].version
+          this.logger('info', `migration ${currentVersion} completed`)
+          await this.updateVersion(currentVersion)
         } catch (e) {
-          const previousVersion = this.migrations[i].version;
-          const destVersion = this.migrations[i - 1].version;
-          throw new Error(`migration from ${previousVersion} to ${destVersion}: ${e.message}`);
+          const previousVersion = this.migrations[i].version
+          const destVersion = this.migrations[i - 1].version
+          throw new Error(`migration from ${previousVersion} to ${destVersion}: ${e.message}`)
         }
       }
     }
@@ -308,15 +307,17 @@ export class Migration {
    * Gets the current control record, optionally creating it if non-existent
    */
   private async getControl(): Promise<{ version: number; locked: boolean }> {
-    const con = await this.collection.findOne({ _id: 'control' });
+    const doc = await this.collection.findOne({ _id: 'control' })
 
-    return (
-      con ||
-      (await this.setControl({
-        version: 0,
-        locked: false,
-      }))
-    );
+    return doc
+      ? {
+          version: doc.version,
+          locked: doc.locked,
+        }
+      : this.setControl({
+          version: 0,
+          locked: false,
+        })
   }
 
   /**
@@ -324,7 +325,7 @@ export class Migration {
    */
   private async setControl(control: {
     version: number
-    locked: boolean,
+    locked: boolean
   }): Promise<{ version: number; locked: boolean } | null> {
     const updateResult = await this.collection.updateOne(
       {
@@ -338,13 +339,13 @@ export class Migration {
       },
       {
         upsert: true,
-      },
-    );
+      }
+    )
 
-    if (updateResult && updateResult.result.ok) {
-      return control;
+    if (updateResult.acknowledged) {
+      return control
     } else {
-      return null;
+      return null
     }
   }
 
@@ -354,10 +355,10 @@ export class Migration {
   private findIndexByVersion(version: number): number {
     for (let i = 0; i < this.migrations.length; i++) {
       if (this.migrations[i].version === version) {
-        return i;
+        return i
       }
     }
 
-    throw new Error(`migration version ${version} not found`);
+    throw new Error(`migration version ${version} not found`)
   }
 }

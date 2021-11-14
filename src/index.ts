@@ -1,5 +1,5 @@
-import { IMigrationOptions, Logger, Migration } from './migration';
+import { IMigrationOptions, Logger, Migration } from './migration'
 
-const migrator = new Migration();
+const migrator = new Migration()
 
-export { Logger, migrator, Migration, IMigrationOptions };
+export { Logger, migrator, Migration, IMigrationOptions }

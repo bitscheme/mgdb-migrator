@@ -1,37 +1,12 @@
-
 {
   "compilerOptions": {
-    "target": "es6",
-    "module": "commonjs",
-    "jsx": "react",
-    "moduleResolution": "node",
-    "declaration": true,
-    "rootDir": ".",
+    "lib": ["ES2019"],
+    "target": "ES2019",
     "outDir": "dist",
-    "baseUrl": ".",
-    "sourceMap": true,
-    "typeRoots": [
-      "node_modules/@types"
-    ],
-    "pretty": true,
-    "removeComments": true,
-    "traceResolution": false,
-    "paths": {
-      "*": [
-        "node_modules/@types/*",
-        "src/*",
-        "*"
-      ],
-      "af-data-models": [
-        "src/index"
-      ]
-    }
-  },
-  "files": [
-    "src/index.ts"
-  ],
-  "include": [
-    "test/**/*"
-  ]
+    "module": "CommonJS",
+    "esModuleInterop": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "sourceMap": true
+  }
 }
-

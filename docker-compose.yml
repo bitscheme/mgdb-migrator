@@ -9,7 +9,7 @@ services:
     depends_on:
       - mgdb-migrator-db
     environment:
-      - 'DBURL=mongodb://mgdb-migrator-db:27017/mgdb-migrator-db'
+      - 'DB_URL=mongodb://mgdb-migrator-db:27017/mgdb-migrator-db'
       - 'NODE_ENV=developoment'
     volumes:
       - '.:/usr/src/mgdb-migrator'
