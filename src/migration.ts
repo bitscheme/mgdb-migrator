@@ -205,7 +205,7 @@ export class Migration {
      */
     const updateResult = await this.collection.findOneAndUpdate(
       {
-        _id: 'control',
+        key: 'control',
         locked: false,
       },
       {
@@ -225,7 +225,7 @@ export class Migration {
   private async unlock(): Promise<void> {
     await this.collection.updateOne(
       {
-        _id: 'control',
+        key: 'control',
       },
       { $set: { locked: false } }
     )
@@ -307,7 +307,7 @@ export class Migration {
    * Gets the current control record, optionally creating it if non-existent
    */
   private async getControl(): Promise<{ version: number; locked: boolean }> {
-    const doc = await this.collection.findOne({ _id: 'control' })
+    const doc = await this.collection.findOne({ key: 'control' })
 
     return doc
       ? {
@@ -329,7 +329,7 @@ export class Migration {
   }): Promise<{ version: number; locked: boolean } | null> {
     const updateResult = await this.collection.updateOne(
       {
-        _id: 'control',
+        key: 'control',
       },
       {
         $set: {
