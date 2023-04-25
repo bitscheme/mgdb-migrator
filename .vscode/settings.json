@@ -1,9 +1,7 @@
 // Settings in this file overwrite default and user settings.
 {
-
   "editor.tabSize": 2,
   "editor.detectIndentation": false,
-  "editor.renderIndentGuides": true,
   "tslint.autoFixOnSave": true,
   "editor.rulers": [100],
   "editor.wordWrapColumn": 100,
@@ -21,5 +19,6 @@
   "prettier.arrowParens": "always",
   "prettier.singleQuote": true,
   "editor.formatOnSave": true,
-  "prettier.printWidth": 100
+  "prettier.printWidth": 100,
+  "editor.guides.indentation": true
 }

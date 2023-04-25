@@ -1,12 +1,31 @@
 {
   "compilerOptions": {
-    "lib": ["ES2019"],
-    "target": "ES2019",
+    "rootDir": "./",
+    "baseUrl": "./",
+    "sourceRoot": "src",
+    "allowJs": false,
+    "checkJs": false,
     "outDir": "dist",
+    "sourceMap": true,
+    "skipLibCheck": true,
     "module": "CommonJS",
+    "lib": ["es2021"],
+    "target": "es2021",
     "esModuleInterop": true,
-    "emitDecoratorMetadata": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
-    "sourceMap": true
-  }
+    "resolveJsonModule": true,
+    "noImplicitThis": true,
+    "types": ["node", "@types/jest"],
+    "typeRoots": ["./node_modules/@types"]
+  },
+  "ts-node": {
+    "compilerOptions": {
+      "module": "CommonJS"
+    },
+    "swc": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", ".vscode", "dist", "coverage", "migrations"]
 }
