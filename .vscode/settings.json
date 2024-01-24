@@ -3,7 +3,9 @@
   "editor.tabSize": 2,
   "editor.detectIndentation": false,
   "tslint.autoFixOnSave": true,
-  "editor.rulers": [100],
+  "editor.rulers": [
+    100
+  ],
   "editor.wordWrapColumn": 100,
   "files.trimTrailingWhitespace": true,
   "files.insertFinalNewline": true,
@@ -20,5 +22,6 @@
   "prettier.singleQuote": true,
   "editor.formatOnSave": true,
   "prettier.printWidth": 100,
-  "editor.guides.indentation": true
+  "editor.guides.indentation": true,
+  "prettier.semi": false
 }

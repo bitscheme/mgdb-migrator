@@ -7,7 +7,7 @@ enum MigrationDirection {
   down = 'down',
 }
 
-export type Logger = (level: string, ...args: any[]) => void
+export type Logger = (level: string, ...args: unknown[]) => void
 
 export interface IDbProperties {
   connectionUrl: string
@@ -26,8 +26,8 @@ export interface IMigrationOptions {
 export interface IMigration {
   version: number
   name: string
-  up: (client?: MongoClient, logger?: Logger) => Promise<any> | any
-  down: (client?: MongoClient, logger?: Logger) => Promise<any> | any
+  up: (client?: MongoClient, logger?: Logger) => Promise<void>
+  down: (client?: MongoClient, logger?: Logger) => Promise<void>
 }
 
 export class Migration {
@@ -53,7 +53,7 @@ export class Migration {
     this.migrations = [this.initialMigration]
     this.options = {
       log: true,
-      logger: (level: string, ...args: any[]) => console[level](...args),
+      logger: (level: string, ...args: unknown[]) => console[level](...args),
       collectionName: 'migrations',
       db: null,
       timeout: Number.POSITIVE_INFINITY,
@@ -170,7 +170,7 @@ export class Migration {
   /**
    * Logger
    */
-  private logger(level: string, ...args: any[]): void {
+  private logger(level: string, ...args: unknown[]): void {
     if (this.options.log) {
       this.options.logger(level, ...args)
     }

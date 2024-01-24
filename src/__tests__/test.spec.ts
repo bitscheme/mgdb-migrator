@@ -14,7 +14,7 @@ describe('Migration', () => {
   beforeAll(async () => {
     await migrator.config({
       log: true,
-      logger: (level: string, ...args: any[]) => console[level]('jest', ...args),
+      logger: (level: string, ...args: unknown[]) => console[level]('jest', ...args),
       collectionName: '_migration',
       db: {
         connectionUrl: process.env.DB_URL || 'mongodb://localhost:27017/mgdb-test',
@@ -31,7 +31,7 @@ describe('Migration', () => {
         expect(typeof logger).toBe('function')
         logger('info', 'up')
       },
-      down: (client, logger) => {
+      down: async (client, logger) => {
         expect(client).toBeInstanceOf(MongoClient)
         expect(typeof logger).toBe('function')
         logger('info', 'down')
@@ -41,10 +41,10 @@ describe('Migration', () => {
     migrator.add({
       version: v2,
       name: 'v2',
-      up: () => {
+      up: async () => {
         //
       },
-      down: () => {
+      down: async () => {
         //
       },
     })
@@ -63,30 +63,30 @@ describe('Migration', () => {
       migrator.add({
         version: v5,
         name: 'v5',
-        up: () => {
+        up: async () => {
           //
         },
-        down: () => {
+        down: async () => {
           //
         },
       })
       migrator.add({
         version: v3,
         name: 'v3',
-        up: () => {
+        up: async () => {
           //
         },
-        down: () => {
+        down: async () => {
           //
         },
       })
       migrator.add({
         version: v4,
         name: 'v4',
-        up: () => {
+        up: async () => {
           //
         },
-        down: () => {
+        down: async () => {
           //
         },
       })
