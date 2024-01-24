@@ -74,6 +74,11 @@ export class Migration {
 
     const db = this.client.db(this.options.db.name || undefined)
     this.collection = db.collection(this.options.collectionName)
+
+    await this.collection.createIndex({ key: 1 }, { unique: true })
+
+    // ensure control record is created
+    this.getOrCreateControl()
   }
 
   /**
@@ -152,7 +157,7 @@ export class Migration {
    * Returns the current version
    */
   public async getVersion(): Promise<number> {
-    const control = await this.getControl()
+    const control = await this.getOrCreateControl()
 
     return control.version
   }
@@ -253,7 +258,7 @@ export class Migration {
     }
 
     // Side effect: upserts control document.
-    const control = await this.getControl()
+    const control = await this.getOrCreateControl()
     let currentVersion = control.version
 
     if (currentVersion === targetVersion) {
@@ -304,9 +309,9 @@ export class Migration {
   }
 
   /**
-   * Gets the current control record, optionally creating it if non-existent
+   * Get or create if not exists the current control record
    */
-  private async getControl(): Promise<{ version: number; locked: boolean }> {
+  private async getOrCreateControl(): Promise<{ version: number; locked: boolean }> {
     const doc = await this.collection.findOne({ key: 'control' })
 
     return doc
