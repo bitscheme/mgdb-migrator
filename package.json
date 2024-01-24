@@ -19,13 +19,13 @@
     "test:watch": "jest dist/* --watchAll --useStderr --coverage",
     "test:debug:watch": "node --inspect=0.0.0.0:5857 node_modules/.bin/jest dist/* --coverage --useStderr"
   },
-  "author": "Emmanuel Buah <emmanuelbuah@gmail.com> (https://twitter.com/emmanuelbuah)",
+  "author": "James Holcomb <jamesholcomb@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/emmanuelbuah/mgdb-migrator"
+    "url": "git+https://github.com/jamesholcomb/mgdb-migrator.git"
   },
   "bugs": {
-    "url": "https://github.com/emmanuelbuah/mgdb-migrator/issues"
+    "url": "https://github.com/jamesholcomb/mgdb-migrator/issues"
   },
   "keywords": [
     "mongo",
