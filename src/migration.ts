@@ -110,7 +110,7 @@ export class Migration {
     try {
       await this.lock()
     } catch (e) {
-      this.logger('error', `migration failed:`, e.message)
+      this.logger('error', `migration failed: ${e.message}`)
 
       throw e
     }
@@ -118,7 +118,7 @@ export class Migration {
     try {
       await this.execute(MigrationDirection.down, version)
     } catch (e) {
-      this.logger('error', `migration failed:`, e.message)
+      this.logger('error', `migration failed: ${e.message}`)
 
       throw e
     } finally {
@@ -135,7 +135,7 @@ export class Migration {
     try {
       await this.lock()
     } catch (e) {
-      this.logger('error', `migration failed:`, e.message)
+      this.logger('error', `migration failed: ${e.message}`)
 
       throw e
     }
@@ -147,7 +147,7 @@ export class Migration {
     try {
       await this.execute(MigrationDirection.up, targetVersion)
     } catch (e) {
-      this.logger('error', `migration failed:`, e.message)
+      this.logger('error', `migration failed: ${e.message}`)
 
       throw e
     } finally {
@@ -209,8 +209,7 @@ export class Migration {
 
     this.logger(
       'info',
-      `running migration ${direction}() on version ${migration.version}`,
-      `${migration.name || ''}`
+      `running migration ${migration.name || ''} ${direction}() on version ${migration.version}`
     )
 
     // Wrap in a promise in case migration is not promise-able
