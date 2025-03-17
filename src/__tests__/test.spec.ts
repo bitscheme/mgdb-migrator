@@ -77,16 +77,22 @@ describe('Migration', () => {
         { $set: { locked: true, lockedAt: new Date() } }
       )
 
-      // Attempt to start a migration while locked
       let currentVersion = await migrator.getVersion()
       expect(currentVersion).toBe(v0)
 
-      // Should reject with lock error
+      // Attempt to start a migration while locked
       await expect(migrator.up(v2)).rejects.toThrow(/locked/i)
 
       // Version should remain unchanged
       currentVersion = await migrator.getVersion()
       expect(currentVersion).toBe(v0)
+
+      // Locked should remain true
+      const { locked } = await migrator['collection'].findOne({ key: 'control' })
+      expect(locked).toBe(true)
+
+      // Unlock the migration
+      await migrator['collection'].updateOne({ key: 'control' }, { $set: { locked: false } })
     })
   })
 

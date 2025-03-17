@@ -109,6 +109,13 @@ export class Migration {
   public async down(version: number): Promise<void> {
     try {
       await this.lock()
+    } catch (e) {
+      this.logger('error', `migration failed:`, e.message)
+
+      throw e
+    }
+
+    try {
       await this.execute(MigrationDirection.down, version)
     } catch (e) {
       this.logger('error', `migration failed:`, e.message)
@@ -125,12 +132,19 @@ export class Migration {
    * @example up(2) - migrate up to version 2
    */
   public async up(version?: number): Promise<void> {
+    try {
+      await this.lock()
+    } catch (e) {
+      this.logger('error', `migration failed:`, e.message)
+
+      throw e
+    }
+
     const targetVersion = version || last(this.migrations).version
 
     ow(targetVersion, ow.number.greaterThan(0))
 
     try {
-      await this.lock()
       await this.execute(MigrationDirection.up, targetVersion)
     } catch (e) {
       this.logger('error', `migration failed:`, e.message)
@@ -206,7 +220,7 @@ export class Migration {
   }
 
   /**
-   * Acquires lock
+   * Acquire control lock
    */
   private async lock() {
     /*
@@ -231,16 +245,17 @@ export class Migration {
       return
     }
 
-    throw new Error('migration locked')
+    throw new Error('migration control locked')
   }
 
   /**
-   * Unlock control
+   * Release control lock
    */
   private async unlock(): Promise<void> {
-    await this.collection.updateOne(
+    const updateResult = await this.collection.updateOne(
       {
         key: 'control',
+        locked: true,
       },
       {
         $set: {
@@ -248,6 +263,12 @@ export class Migration {
         },
       }
     )
+
+    if (updateResult.modifiedCount === 1) {
+      return
+    }
+
+    throw new Error('migration control not locked')
   }
 
   // Side effect: saves version.
@@ -277,7 +298,6 @@ export class Migration {
       return
     }
 
-    // Side effect: upserts control document.
     const control = await this.getOrCreateControl()
     let currentVersion = control.version
 
@@ -331,18 +351,7 @@ export class Migration {
   /**
    * Get or create if not exists the current control record
    */
-  private async getOrCreateControl(): Promise<{ version: number; locked: boolean }> {
-    // const doc = await this.collection.findOne({ key: 'control' })
-
-    // return doc
-    //   ? {
-    //       version: doc.version,
-    //       locked: doc.locked,
-    //     }
-    //   : this.setControl({
-    //       version: 0,
-    //       locked: false,
-    //     })
+  private async getOrCreateControl(): Promise<MigrationControl> {
     const result = await this.collection.findOneAndUpdate(
       { key: 'control' },
       {
