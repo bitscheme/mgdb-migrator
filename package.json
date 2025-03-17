@@ -22,10 +22,10 @@
   "author": "James Holcomb <jamesholcomb@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jamesholcomb/mgdb-migrator.git"
+    "url": "git+https://github.com/bitscheme/mgdb-migrator.git"
   },
   "bugs": {
-    "url": "https://github.com/jamesholcomb/mgdb-migrator/issues"
+    "url": "https://github.com/bitscheme/mgdb-migrator/issues"
   },
   "keywords": [
     "mongo",
@@ -34,7 +34,7 @@
   ],
   "license": "ISC",
   "engines": {
-    "node": ">=18.15"
+    "node": ">=20.18"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
