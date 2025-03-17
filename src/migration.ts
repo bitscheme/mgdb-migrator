@@ -1,4 +1,4 @@
-import { last } from 'lodash'
+import last from 'lodash.last'
 import { Collection, MongoClient, MongoClientOptions } from 'mongodb'
 import ow from 'ow'
 

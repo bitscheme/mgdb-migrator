@@ -31,7 +31,6 @@
     "compilerOptions": {
       "module": "CommonJS"
     },
-    "swc": true
   },
   "include": [
     "src/**/*"
