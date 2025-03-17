@@ -15,9 +15,9 @@ describe('Migration', () => {
     await migrator.config({
       log: true,
       logger: (level: string, ...args: unknown[]) => console[level]('jest', ...args),
-      collectionName: '_migration',
+      collectionName: 'migrations',
       db: {
-        connectionUrl: process.env.DB_URL || 'mongodb://localhost:27017/mgdb-test',
+        connectionUrl: process.env.MONGODB_URL || 'mongodb://localhost:27017/mgdb-test',
       },
     })
   })
@@ -51,14 +51,46 @@ describe('Migration', () => {
   })
 
   afterEach(async () => {
-    await migrator.reset()
+    migrator.reset()
+
+    await migrator['collection'].updateOne(
+      {
+        key: 'control',
+      },
+      {
+        $set: {
+          version: 0,
+        },
+      }
+    )
   })
 
   afterAll(async () => {
     await migrator.close()
   })
 
-  describe('#add', () => {
+  describe('Concurrency', () => {
+    test('cannot start migration if already locked', async () => {
+      // Manually set locked state to simulate a migration in progress
+      await migrator['collection'].updateOne(
+        { key: 'control' },
+        { $set: { locked: true, lockedAt: new Date() } }
+      )
+
+      // Attempt to start a migration while locked
+      let currentVersion = await migrator.getVersion()
+      expect(currentVersion).toBe(v0)
+
+      // Should reject with lock error
+      await expect(migrator.up(v2)).rejects.toThrow(/locked/i)
+
+      // Version should remain unchanged
+      currentVersion = await migrator.getVersion()
+      expect(currentVersion).toBe(v0)
+    })
+  })
+
+  describe('Add', () => {
     test('sorts added migrations', async () => {
       migrator.add({
         version: v5,
@@ -94,7 +126,7 @@ describe('Migration', () => {
     })
   })
 
-  describe('#migrate', () => {
+  describe('Migrate', () => {
     test('from v0 to v1, should migrate to v1', async () => {
       let currentVersion = await migrator.getVersion()
       expect(currentVersion).toBe(v0)

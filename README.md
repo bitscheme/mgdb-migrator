@@ -42,9 +42,9 @@ await migrator.config({
     // optional mongodb MongoClientOptions
     options: {
       useNewUrlParser: true,
-      useUnifiedTopology: true
-    }
-  }
+      useUnifiedTopology: true,
+    },
+  },
 })
 
 migrator.add({
@@ -63,7 +63,7 @@ migrator.add({
       .db()
       .collection('albums')
       .updateMany({}, { $set: { stars: 0 } })
-  }
+  },
 })
 
 // run all configured migrations greater than the current version in order
@@ -209,7 +209,7 @@ const albumMigration = {
     } finally {
       await session.endSession()
     }
-  }
+  },
 }
 ```
 
@@ -255,6 +255,14 @@ $ npm run docker:dev
 ```
 
 ## Test
+
+To configure a specific db connection for testing, create a `.env` file in the root of the project:
+
+Example:
+
+```sh
+MONGODB_URL=mongodb://localhost:27017/mgdb-migrator-test
+```
 
 Run docker-compose to execute lib in test mode
 

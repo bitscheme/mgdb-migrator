@@ -1,3 +1,8 @@
+import dotenv from 'dotenv'
+
+// Load environment variables from .env file
+dotenv.config()
+
 export default {
   // An array of file extensions your modules use
   moduleFileExtensions: ['js', 'jsx', 'ts', 'tsx', 'json', 'node'],

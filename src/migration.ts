@@ -30,6 +30,11 @@ export interface IMigration {
   down: (client?: MongoClient, logger?: Logger) => Promise<void>
 }
 
+export type MigrationControl = {
+  version: number
+  locked: boolean
+}
+
 export class Migration {
   private initialMigration: IMigration = {
     version: 0,
@@ -156,26 +161,27 @@ export class Migration {
   /**
    * Returns the current version
    */
-  public async getVersion(): Promise<number> {
-    const control = await this.getOrCreateControl()
+  public async getVersion() {
+    const control = await this.collection.findOne({ key: 'control' })
+
+    if (!control) {
+      throw new Error('control record not found')
+    }
 
     return control.version
   }
 
   /**
-   * Reset migration collection and configuration
-   * Intended for dev and test mode only. Use wisely
+   * Reset migration to v0
    */
-  public async reset(): Promise<void> {
+  public async reset() {
     this.migrations = [this.initialMigration]
-
-    await this.collection.deleteMany({})
   }
 
   /**
    * Logger
    */
-  private logger(level: string, ...args: unknown[]): void {
+  private logger(level: string, ...args: unknown[]) {
     if (this.options.log) {
       this.options.logger(level, ...args)
     }
@@ -200,9 +206,9 @@ export class Migration {
   }
 
   /**
-   * Returns true if lock was acquired.
+   * Acquires lock
    */
-  private async lock(): Promise<boolean> {
+  private async lock() {
     /*
      * This is an atomic op. The op ensures only one caller at a time will match the control
      * object and thus be able to update it.  All other simultaneous callers will not match the
@@ -221,7 +227,11 @@ export class Migration {
       }
     )
 
-    return null != updateResult.value && 1 === updateResult.ok
+    if (updateResult.ok === 1 && updateResult.value) {
+      return
+    }
+
+    throw new Error('migration locked')
   }
 
   /**
@@ -232,16 +242,26 @@ export class Migration {
       {
         key: 'control',
       },
-      { $set: { locked: false } }
+      {
+        $set: {
+          locked: false,
+        },
+      }
     )
   }
 
   // Side effect: saves version.
-  private updateVersion(version: number) {
-    return this.setControl({
-      locked: true,
-      version,
-    })
+  private async updateVersion(version: number) {
+    return this.collection.updateOne(
+      {
+        key: 'control',
+      },
+      {
+        $set: {
+          version,
+        },
+      }
+    )
   }
 
   /**
@@ -312,45 +332,34 @@ export class Migration {
    * Get or create if not exists the current control record
    */
   private async getOrCreateControl(): Promise<{ version: number; locked: boolean }> {
-    const doc = await this.collection.findOne({ key: 'control' })
+    // const doc = await this.collection.findOne({ key: 'control' })
 
-    return doc
-      ? {
-          version: doc.version,
-          locked: doc.locked,
-        }
-      : this.setControl({
+    // return doc
+    //   ? {
+    //       version: doc.version,
+    //       locked: doc.locked,
+    //     }
+    //   : this.setControl({
+    //       version: 0,
+    //       locked: false,
+    //     })
+    const result = await this.collection.findOneAndUpdate(
+      { key: 'control' },
+      {
+        $setOnInsert: {
           version: 0,
           locked: false,
-        })
-  }
-
-  /**
-   * Set the control record
-   */
-  private async setControl(control: {
-    version: number
-    locked: boolean
-  }): Promise<{ version: number; locked: boolean } | null> {
-    const updateResult = await this.collection.updateOne(
-      {
-        key: 'control',
-      },
-      {
-        $set: {
-          version: control.version,
-          locked: control.locked,
         },
       },
       {
         upsert: true,
+        returnDocument: 'after',
       }
     )
 
-    if (updateResult.acknowledged) {
-      return control
-    } else {
-      return null
+    return {
+      version: result.value.version,
+      locked: result.value.locked,
     }
   }
 
